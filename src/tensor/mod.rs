@@ -461,13 +461,16 @@ impl<V: TensorElement> Tensor<V> {
     pub fn ones(shape: &[usize]) -> Self {
         Self::constant(shape, V::one())
     }
-    pub fn rand<R: Rng>(r: &mut R, shape: &[usize]) -> Tensor<f32> {
+    pub fn rand_range<R: Rng>(r: &mut R, start: f32, end: f32, shape: &[usize]) -> Tensor<f32> {
         Tensor::<f32> {
             blob: (0..shape.iter().fold(1, |curr, s| curr * s))
-                .map(|_| r.gen::<f32>() / 4. - 0.125)
+                .map(|_| r.gen_range(start..end))
                 .collect(),
             shape: shape.to_vec(),
         }
+    }
+    pub fn rand<R: Rng>(r: &mut R, shape: &[usize]) -> Tensor<f32> {
+        Tensor::<f32>::rand_range(r, -0.0625, 0.0625, shape)
     }
     pub fn stack<T: TensorOps<V>>(inps: &[T]) -> Self {
         let mut shape = inps

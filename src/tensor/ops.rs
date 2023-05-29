@@ -119,7 +119,7 @@ impl<'a, V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V
                     let i = work / b.shape()[1];
                     let mut sum = <<V as std::ops::Mul>::Output as std::ops::Add>::Output::zero();
                     for k in 0..a.shape()[1] {
-                        sum = sum + a.get(i).get(k).scalar() * b.get(k).get(j).scalar();
+                        sum = sum + a.blob()[i * a.shape()[1] + k] * b.blob()[k * b.shape()[1] + j];
                     }
                     sum
                 })

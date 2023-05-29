@@ -333,24 +333,17 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
     }
 
     fn transpose(&self) -> Tensor<V> {
-        let dim = self.dim();
-        let mut shape = self.shape().to_vec();
-        let temp = shape[dim - 2];
-        shape[dim - 2] = shape[dim - 1];
-        shape[dim - 1] = temp;
-        let mut t = Tensor::zeros(&shape);
-        for (mut dst, src) in t
-            .keep_right_mut(2)
-            .iter_mut()
-            .zip(self.keep_right(2).inners().iter())
-        {
-            for i in 0..dst.shape()[0] {
-                for j in 0..dst.shape()[1] {
-                    dst.get_mut(i).get_mut(j).set(src.get(j).get(i));
+        self.map(2, |m| {
+            let d0 = m.shape()[0];
+            let d1 = m.shape()[1];
+            let mut dat = Vec::new();
+            for j in 0..d1 {
+                for i in 0..d0 {
+                    dat.push(m.blob()[i * d1 + j]);
                 }
             }
-        }
-        t
+            Tensor::raw(&[d1, d0], dat)
+        })
     }
 }
 

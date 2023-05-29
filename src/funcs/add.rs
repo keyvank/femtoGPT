@@ -8,7 +8,7 @@ impl Add {
     }
 }
 impl Function for Add {
-    fn run(&mut self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
+    fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Tensor<f32> {
         assert_eq!(inps.len(), 2);
         inps[0] + inps[1]
     }

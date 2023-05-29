@@ -25,7 +25,7 @@ pub use transpose::*;
 use super::tensor::*;
 
 pub trait Function: std::fmt::Debug {
-    fn run(&mut self, inps: &[&Tensor<f32>]) -> Tensor<f32>;
+    fn run(&mut self, inps: &[&Tensor<f32>], training: bool) -> Tensor<f32>;
     fn grad(
         &self,
         inps: &[&Tensor<f32>],

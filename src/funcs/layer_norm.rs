@@ -18,7 +18,7 @@ impl LayerNorm {
 const EPSILON: f32 = 1e-5;
 
 impl Function for LayerNorm {
-    fn run(&mut self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
+    fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Tensor<f32> {
         self.norm = inps[0].map(self.dims, |l| {
             let avg = l.blob().iter().sum::<f32>() / l.size() as f32;
             let var = (l.blob().iter().map(|f| (f - avg).powi(2)).sum::<f32>() / l.size() as f32

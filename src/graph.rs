@@ -134,14 +134,14 @@ impl Graph {
 
         loss
     }
-    pub fn forward(&mut self) {
+    pub fn forward(&mut self, training: bool) {
         for c in self.computations.iter_mut() {
             let tensors = c
                 .inps
                 .iter()
                 .map(|id| self.tensors.get(id).expect("Tensor not found!"))
                 .collect::<Vec<_>>();
-            let result = c.func.run(&tensors);
+            let result = c.func.run(&tensors, training);
             self.tensors.insert(c.out, result);
         }
     }
@@ -150,7 +150,7 @@ impl Graph {
             .iter()
             .map(|id| self.tensors.get(id).expect("Tensor not found!"))
             .collect::<Vec<_>>();
-        let out = f.run(&tensors);
+        let out = f.run(&tensors, false);
         let child = self.alloc(out);
         self.computations.push(Computation {
             func: f,

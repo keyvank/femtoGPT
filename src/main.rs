@@ -5,10 +5,12 @@ mod tensor;
 
 use funcs::*;
 use graph::{Graph, TensorId};
-use optimizer::NaiveOptimizer;
+use optimizer::AdamW;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::fs::*;
+use std::io::prelude::*;
 use tensor::{Tensor, TensorMutOps, TensorOps};
 
 fn sample_dataset<R: Rng>(
@@ -78,15 +80,15 @@ fn main() {
         .map(|ch| ch_to_int.get(&ch).unwrap().clone())
         .collect::<Vec<_>>();
 
-    let batch_size = 100;
+    let batch_size = 10;
     let num_tokens = 64;
     let vocab_size = chars.len();
-    let embedding_degree = 16;
+    let embedding_degree = 64;
 
-    let num_attentions = 2;
-    let num_heads = 4;
-    let head_size = 4;
-    let head_size_sqrt_inv = 0.25;
+    let num_attentions = 6;
+    let num_heads = 8;
+    let head_size = 8;
+    let head_size_sqrt_inv = 0.125;
 
     let mut embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
     let mut pos_embedding = Tensor::<f32>::rand(&mut rng, &[num_tokens, embedding_degree]);
@@ -182,7 +184,12 @@ fn main() {
     let result = g.call(Add::new(), &[result_lin, to_vocab_bias]);
     params.extend(&[to_vocab, to_vocab_bias]);
 
-    /*{
+    println!(
+        "Params: {}",
+        params.iter().map(|p| g.get(*p).size()).sum::<usize>()
+    );
+
+    {
         for p in params.iter() {
             if *p != char_inp || *p != pos_inp {
                 let mut tensor_file = File::open(format!("tensor_{}.dat", p)).unwrap();
@@ -201,9 +208,9 @@ fn main() {
         let mut bytes = Vec::new();
         pos_embed_data.read_to_end(&mut bytes).unwrap();
         pos_embedding = bincode::deserialize(&bytes).unwrap();
-    }*/
+    }
 
-    let mut opt = NaiveOptimizer::new(0.00003);
+    let mut opt = AdamW::new(0.00003);
     loop {
         let poses = Tensor::raw(
             &[batch_size, num_tokens],
@@ -215,7 +222,7 @@ fn main() {
         let (xs, ys) = sample_dataset(&dataset, batch_size, num_tokens, &mut rng);
         g.load(char_inp, &embed(&xs, &embedding));
         g.load(pos_inp, &embed(&poses, &pos_embedding));
-        g.forward();
+        g.forward(true);
         g.zero_grad();
         let err = g.backward_all(result, CrossEntropy::new(vocab_size as u32, ys.clone()));
         println!("Loss: {}", err.mean());
@@ -235,27 +242,32 @@ fn main() {
             fs::write("pos_embedding.dat", &pos_embed_data).expect("Unable to write file");
         }
 
-        /*{
+        {
             let mut cnt = 1;
-            let mut context = vec![2; num_tokens];
-            for _ in 0..30 {
+            let mut context = vec![0; num_tokens];
+            for _ in 0..256 {
                 g.load(
                     inp,
                     &embed(&Tensor::raw(&[1, num_tokens], context.clone()), &embedding),
                 );
-                g.forward();
+                g.forward(false);
                 let next_ch = g.get(result).argmax().blob()[cnt - 1];
                 println!(
-                    "{:?}",
+                    "{}",
                     &context
                         .iter()
                         .map(|i| int_to_ch.get(i).unwrap())
-                        .collect::<Vec<_>>()[..cnt]
+                        .collect::<String>()[..cnt]
                 );
+                if cnt == 64 {
+                    context.remove(0);
+                    context.push(0);
+                    cnt -= 1;
+                }
                 context[cnt] = next_ch;
                 cnt += 1;
             }
             println!();
-        }*/
+        }
     }
 }

@@ -8,7 +8,7 @@ impl Relu {
     }
 }
 impl Function for Relu {
-    fn run(&mut self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
+    fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Tensor<f32> {
         assert_eq!(inps.len(), 1);
         inps[0].map_values(|f| if f > 0. { f } else { 0. })
     }

@@ -15,12 +15,16 @@ impl Dropout {
 }
 
 impl Function for Dropout {
-    fn run(&mut self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
-        let mut rng = rand::thread_rng();
-        let rnd = Tensor::<f32>::rand_range(&mut rng, 0., 1.0, inps[0].shape());
-        let scale = 1. / (1. - self.rate);
-        self.mask = rnd.map_values(|v| if v > self.rate { scale } else { 0. });
-        inps[0] * &self.mask
+    fn run(&mut self, inps: &[&Tensor<f32>], training: bool) -> Tensor<f32> {
+        if training {
+            let mut rng = rand::thread_rng();
+            let rnd = Tensor::<f32>::rand_range(&mut rng, 0., 1.0, inps[0].shape());
+            let scale = 1. / (1. - self.rate);
+            self.mask = rnd.map_values(|v| if v > self.rate { scale } else { 0. });
+            inps[0] * &self.mask
+        } else {
+            inps[0].clone()
+        }
     }
     fn grad(
         &self,

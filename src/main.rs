@@ -96,7 +96,7 @@ fn main() {
         .map(|ch| ch_to_int.get(&ch).unwrap().clone())
         .collect::<Vec<_>>();
 
-    let batch_size = 30;
+    let batch_size = 3;
     let num_tokens = 64;
     let vocab_size = chars.len();
     let embedding_degree = 384;

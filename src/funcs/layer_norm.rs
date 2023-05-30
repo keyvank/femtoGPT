@@ -60,7 +60,7 @@ impl Function for LayerNorm {
                     .collect(),
             )
         });
-        let inp0_out = &(inps[1] * &jacobian) ^ out_grad;
+        let inp0_out = &(inps[1] * &jacobian) ^ &out_grad.unsqueeze(-1);
         vec![
             inp0_out.squeeze(-1).into(),
             out_grad * &self.norm,

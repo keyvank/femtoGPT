@@ -96,14 +96,14 @@ fn main() {
         .map(|ch| ch_to_int.get(&ch).unwrap().clone())
         .collect::<Vec<_>>();
 
-    let batch_size = 10;
+    let batch_size = 30;
     let num_tokens = 64;
     let vocab_size = chars.len();
-    let embedding_degree = 64;
+    let embedding_degree = 384;
 
     let num_attentions = 6;
-    let num_heads = 8;
-    let head_size = 8;
+    let num_heads = 6;
+    let head_size = 64;
     let head_size_sqrt_inv = 0.125;
 
     let mut embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
@@ -122,7 +122,7 @@ fn main() {
         let norm_coeff = g.alloc_param(&mut rng, &[embedding_degree]);
         let norm_bias = g.alloc_param(&mut rng, &[embedding_degree]);
         params.extend(&[norm_coeff, norm_bias]);
-        let norm_inp = g.call(LayerNorm::new(1), &[curr_inp, norm_coeff, norm_bias]);
+        let norm_inp = g.call(LayerNorm::new(), &[curr_inp, norm_coeff, norm_bias]);
         let mut heads = Vec::new();
         for _i in 0..num_heads {
             let k_params = g.alloc_param(&mut rng, &[embedding_degree, head_size]);
@@ -158,7 +158,7 @@ fn main() {
         let add_atten_norm_coeff = g.alloc_param(&mut rng, &[embedding_degree]);
         let add_atten_norm_bias = g.alloc_param(&mut rng, &[embedding_degree]);
         let add_atten_norm = g.call(
-            LayerNorm::new(1),
+            LayerNorm::new(),
             &[add_atten, add_atten_norm_coeff, add_atten_norm_bias],
         );
 
@@ -190,10 +190,7 @@ fn main() {
     let norm_out_coeff = g.alloc_param(&mut rng, &[embedding_degree]);
     let norm_out_bias = g.alloc_param(&mut rng, &[embedding_degree]);
     params.extend(&[norm_out_coeff, norm_out_bias]);
-    let norm_out = g.call(
-        LayerNorm::new(1),
-        &[curr_inp, norm_out_coeff, norm_out_bias],
-    );
+    let norm_out = g.call(LayerNorm::new(), &[curr_inp, norm_out_coeff, norm_out_bias]);
     let to_vocab = g.alloc_param(&mut rng, &[embedding_degree, vocab_size]);
     let to_vocab_bias = g.alloc_param(&mut rng, &[vocab_size]);
     let result_lin = g.call(MatMul::new(), &[norm_out, to_vocab]);
@@ -226,8 +223,8 @@ fn main() {
         pos_embedding = bincode::deserialize(&bytes).unwrap();
     }
 
-    let mut opt = AdamW::new(0.00003);
-    loop {
+    let mut opt = AdamW::new(0.00006);
+    for i in 0..100 {
         let poses = Tensor::raw(
             &[batch_size, num_tokens],
             (0..num_tokens as u32)
@@ -245,7 +242,7 @@ fn main() {
         g.optimize(&mut opt, &params.iter().cloned().collect());
         unembed(&xs, g.get(char_inp), &mut embedding);
         unembed(&poses, g.get(pos_inp), &mut pos_embedding);
-        {
+        if i % 10 == 0 {
             for p in params.iter() {
                 if *p != char_inp || *p != pos_inp {
                     let data = bincode::serialize(g.get(*p)).unwrap();
@@ -256,6 +253,7 @@ fn main() {
             fs::write("embedding.dat", &embed_data).expect("Unable to write file");
             let pos_embed_data = bincode::serialize(&pos_embedding).unwrap();
             fs::write("pos_embedding.dat", &pos_embed_data).expect("Unable to write file");
+            println!("Saved");
         }
 
         /*{

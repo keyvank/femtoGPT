@@ -53,6 +53,22 @@ fn unembed(s: &Tensor<u32>, s_result: &Tensor<f32>, embedding: &mut Tensor<f32>)
     Tensor::scalar(0.)
 }
 
+fn select<T: TensorOps<f32>>(t: &T) -> u32 {
+    let t = Softmax::new().run(&[&Tensor::<f32>::raw(t.shape(), t.blob().to_vec())], false);
+    let mut rng = rand::thread_rng();
+    let mut ts = t.blob().iter().cloned().enumerate().collect::<Vec<_>>();
+    ts.sort_by_key(|(_, b)| (b * 1000.) as u32);
+    let mut accum = 0.;
+    for (id, t) in ts.iter().rev() {
+        accum += t;
+        let dice = rng.gen_range(0f32..1f32);
+        if dice < accum {
+            return *id as u32;
+        }
+    }
+    panic!();
+}
+
 fn main() {
     let mut rng = rand::thread_rng();
 
@@ -210,7 +226,7 @@ fn main() {
         pos_embedding = bincode::deserialize(&bytes).unwrap();
     }
 
-    let mut opt = AdamW::new(0.00001);
+    let mut opt = AdamW::new(0.00003);
     loop {
         let poses = Tensor::raw(
             &[batch_size, num_tokens],
@@ -225,7 +241,7 @@ fn main() {
         g.forward(true);
         g.zero_grad();
         let err = g.backward_all(result, CrossEntropy::new(vocab_size as u32, ys.clone()));
-        println!("Loss: {}", err.mean());
+        println!("Loss: {}", err);
         g.optimize(&mut opt, &params.iter().cloned().collect());
         unembed(&xs, g.get(char_inp), &mut embedding);
         unembed(&poses, g.get(pos_inp), &mut pos_embedding);
@@ -245,20 +261,20 @@ fn main() {
         /*{
             let mut cnt = 1;
             let mut context = vec![0; num_tokens];
+            let poses = Tensor::raw(
+                &[1, num_tokens],
+                (0..num_tokens as u32).cycle().take(num_tokens).collect(),
+            );
+            g.load(pos_inp, &embed(&poses, &pos_embedding));
             for _ in 0..256 {
                 g.load(
-                    inp,
+                    char_inp,
                     &embed(&Tensor::raw(&[1, num_tokens], context.clone()), &embedding),
                 );
                 g.forward(false);
-                let next_ch = g.get(result).argmax().blob()[cnt - 1];
-                println!(
-                    "{}",
-                    &context
-                        .iter()
-                        .map(|i| int_to_ch.get(i).unwrap())
-                        .collect::<String>()[..cnt]
-                );
+                let next_ch = select(&g.get(result).get(0).get(cnt - 1));
+                print!("{}",int_to_ch.get(&next_ch).unwrap());
+                std::io::stdout().flush();
                 if cnt == 64 {
                     context.remove(0);
                     context.push(0);

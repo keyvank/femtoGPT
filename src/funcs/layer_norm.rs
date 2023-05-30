@@ -68,8 +68,8 @@ impl Function for LayerNorm {
             *kept_right_shape.last_mut().unwrap() *= last;
         }
         let kept_right = out_grad.reshape(&kept_right_shape);
-        let inp0_out = &kept_right.unsqueeze(-2) ^ &jacobian;
-        let squeezed = inp0_out.squeeze(-2);
+        let inp0_out = &jacobian ^ &kept_right.unsqueeze(-1);
+        let squeezed = inp0_out.squeeze(-1);
         vec![
             &Into::<Tensor<f32>>::into(squeezed.reshape(out_grad.shape())) * inps[1],
             out_grad * &self.norm,

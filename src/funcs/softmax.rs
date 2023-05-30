@@ -54,7 +54,7 @@ impl Function for Softmax {
             )
         });
 
-        let out = &out_grad.unsqueeze(-2) ^ &jacobian;
-        vec![out.squeeze(-2).into()]
+        let out = &jacobian ^ &out_grad.unsqueeze(-1);
+        vec![out.squeeze(-1).into()]
     }
 }

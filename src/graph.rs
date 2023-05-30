@@ -134,6 +134,46 @@ impl Graph {
 
         loss
     }
+    pub fn gradient_check(&mut self, id: TensorId) {
+        const EPSILON: f32 = 1e-5;
+        for comp in self.computations.iter_mut() {
+            for i in 0..comp.inps.len() {
+                let mut inps = comp
+                    .inps
+                    .iter()
+                    .map(|id| {
+                        Tensor::<f32>::rand_range(
+                            &mut rand::thread_rng(),
+                            -0.1,
+                            0.1,
+                            self.tensors[id].shape(),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let inp_val = inps[i].clone();
+
+                inps[i] = (&inp_val + &Tensor::scalar(EPSILON));
+                let out_plus = comp.func.run(&inps.iter().collect::<Vec<_>>(), false);
+
+                inps[i] = (&inp_val - &Tensor::scalar(EPSILON));
+                let out_minus = comp.func.run(&inps.iter().collect::<Vec<_>>(), false);
+
+                let numeric = &(&out_plus - &out_minus) * &Tensor::scalar(0.5 / EPSILON);
+                inps[i] = inp_val.clone();
+                let out = comp.func.run(&inps.iter().collect::<Vec<_>>(), false);
+                let symbolic = comp.func.grad(
+                    &inps.iter().collect::<Vec<_>>(),
+                    &out,
+                    &Tensor::ones(out.shape()),
+                )[i]
+                    .clone();
+
+                let num_sum = numeric.blob().iter().sum::<f32>();
+                let sym_sum = symbolic.blob().iter().sum::<f32>();
+                let diff = num_sum / sym_sum;
+            }
+        }
+    }
     pub fn forward(&mut self, training: bool) {
         for c in self.computations.iter_mut() {
             let tensors = c

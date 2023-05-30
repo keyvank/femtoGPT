@@ -1,4 +1,5 @@
 use super::{Function, Tensor, TensorMutOps, TensorOps};
+use rayon::prelude::*;
 
 #[derive(Debug)]
 pub struct Mask {
@@ -16,17 +17,15 @@ impl Mask {
 
 impl Function for Mask {
     fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Tensor<f32> {
-        let mut reshaped = self.mask.shape().to_vec();
-        reshaped.insert(0, 0);
-        let mut result = inps[0].clone();
-        for mut t in result.reshape_mut(&reshaped).iter_mut() {
-            for (r, mask) in t.blob_mut().iter_mut().zip(self.mask.blob().iter()) {
-                if *mask == 1. {
-                    *r = self.value;
-                }
-            }
-        }
-        result
+        inps[0].map(self.mask.dim(), |t| {
+            let dat = t
+                .blob()
+                .par_iter()
+                .zip(self.mask.blob().par_iter())
+                .map(|(v, m)| if *m == 1. { self.value } else { *v })
+                .collect::<Vec<_>>();
+            Tensor::raw(t.shape(), dat)
+        })
     }
     fn grad(
         &self,

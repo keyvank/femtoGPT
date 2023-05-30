@@ -242,7 +242,7 @@ fn main() {
             fs::write("pos_embedding.dat", &pos_embed_data).expect("Unable to write file");
         }
 
-        {
+        /*{
             let mut cnt = 1;
             let mut context = vec![0; num_tokens];
             for _ in 0..256 {
@@ -268,6 +268,6 @@ fn main() {
                 cnt += 1;
             }
             println!();
-        }
+        }*/
     }
 }

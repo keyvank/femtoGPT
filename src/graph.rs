@@ -117,10 +117,11 @@ impl Graph {
             }
         }
     }
-    pub fn backward_all(&mut self, id: TensorId, loss_fn: Box<dyn Loss>) -> Tensor<f32> {
+    pub fn backward_all(&mut self, id: TensorId, loss_fn: Box<dyn Loss>) -> f32 {
         let output = self.get(id);
         let (loss, grad) = loss_fn.run(output);
-        self.add_grad(id, grad);
+        let mean_coeff = 1. / loss.size() as f32;
+        self.add_grad(id, &grad * &Tensor::scalar(mean_coeff));
 
         let backward_order = self
             .computations
@@ -132,7 +133,7 @@ impl Graph {
             self.backward(id);
         }
 
-        loss
+        loss.mean()
     }
     pub fn gradient_check(&mut self, id: TensorId) {
         const EPSILON: f32 = 1e-5;

@@ -103,8 +103,8 @@ fn main() {
 
     let mut curr_inp = inp;
     for _ in 0..num_attentions {
-        let norm_coeff = g.alloc_param(&mut rng, &[1]);
-        let norm_bias = g.alloc_param(&mut rng, &[1]);
+        let norm_coeff = g.alloc_param(&mut rng, &[embedding_degree]);
+        let norm_bias = g.alloc_param(&mut rng, &[embedding_degree]);
         params.extend(&[norm_coeff, norm_bias]);
         let norm_inp = g.call(LayerNorm::new(1), &[curr_inp, norm_coeff, norm_bias]);
         let mut heads = Vec::new();
@@ -139,8 +139,8 @@ fn main() {
         let dropped_proj_cat_bias = g.call(Dropout::new(0.2), &[proj_cat_bias]);
 
         let add_atten = g.call(Add::new(), &[norm_inp, dropped_proj_cat_bias]);
-        let add_atten_norm_coeff = g.alloc_param(&mut rng, &[1]);
-        let add_atten_norm_bias = g.alloc_param(&mut rng, &[1]);
+        let add_atten_norm_coeff = g.alloc_param(&mut rng, &[embedding_degree]);
+        let add_atten_norm_bias = g.alloc_param(&mut rng, &[embedding_degree]);
         let add_atten_norm = g.call(
             LayerNorm::new(1),
             &[add_atten, add_atten_norm_coeff, add_atten_norm_bias],
@@ -171,8 +171,8 @@ fn main() {
         curr_inp = g.call(Add::new(), &[add_atten_norm, lin2_bias_result]);
     }
 
-    let norm_out_coeff = g.alloc_param(&mut rng, &[1]);
-    let norm_out_bias = g.alloc_param(&mut rng, &[1]);
+    let norm_out_coeff = g.alloc_param(&mut rng, &[embedding_degree]);
+    let norm_out_bias = g.alloc_param(&mut rng, &[embedding_degree]);
     params.extend(&[norm_out_coeff, norm_out_bias]);
     let norm_out = g.call(
         LayerNorm::new(1),
@@ -210,7 +210,7 @@ fn main() {
         pos_embedding = bincode::deserialize(&bytes).unwrap();
     }
 
-    let mut opt = AdamW::new(0.00003);
+    let mut opt = AdamW::new(0.00001);
     loop {
         let poses = Tensor::raw(
             &[batch_size, num_tokens],

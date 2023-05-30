@@ -55,6 +55,20 @@ pub fn combine_map<
     dims: usize,
     f: F,
 ) -> Tensor<X> {
+    if t1.shape() == t2.shape() && dims == 0 {
+        let dat = t1
+            .blob()
+            .par_iter()
+            .zip(t2.blob().par_iter())
+            .map(|(f1, f2)| {
+                let t1 = Tensor::scalar(*f1);
+                let t2 = Tensor::scalar(*f2);
+                f(&t1.view(), &t2.view()).blob
+            })
+            .flatten()
+            .collect::<Vec<_>>();
+        return Tensor::raw(t1.shape(), dat);
+    }
     fn calc_shape(pos: &[usize], shape: &[usize]) -> Vec<usize> {
         pos[pos.len() - shape.len()..]
             .iter()

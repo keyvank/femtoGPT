@@ -4,17 +4,17 @@ pub trait Optimizer {
     fn step(&mut self, params: Vec<&mut Tensor<f32>>, grads: Vec<&Tensor<f32>>);
 }
 
-pub struct NaiveOptimizer {
+pub struct Naive {
     learning_rate: f32,
 }
 
-impl NaiveOptimizer {
+impl Naive {
     pub fn new(learning_rate: f32) -> Box<dyn Optimizer> {
         Box::new(Self { learning_rate })
     }
 }
 
-impl Optimizer for NaiveOptimizer {
+impl Optimizer for Naive {
     fn step(&mut self, params: Vec<&mut Tensor<f32>>, grads: Vec<&Tensor<f32>>) {
         for (param, grad) in params.into_iter().zip(grads.into_iter()) {
             *param = &*param + &(grad * &Tensor::scalar(-self.learning_rate));

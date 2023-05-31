@@ -1,6 +1,7 @@
 use femto_gpt::gpt::GPT;
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::io::Write;
 
 fn main() {
     let mut rng = rand::thread_rng();
@@ -13,7 +14,7 @@ fn main() {
         .into_iter()
         .collect::<Vec<_>>();
     chars.sort();
-    let _int_to_ch = chars
+    let int_to_ch = chars
         .iter()
         .enumerate()
         .map(|(i, ch)| (i as u32, *ch))
@@ -48,13 +49,14 @@ fn main() {
 
     gpt.load();
 
-    /*gpt.infer(100, |ch| {
+    gpt.infer(30, |ch| {
         print!("{}", int_to_ch.get(&ch).unwrap());
         std::io::stdout().flush().unwrap();
-    });*/
+    });
+
+    println!();
 
     gpt.train(&dataset, 100, batch_size);
-    //gpt.save();
 
     /*println!(
         "Params: {}",

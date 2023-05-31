@@ -232,7 +232,7 @@ impl<R: Rng> GPT<R> {
     }
 
     pub fn train(&mut self, dataset: &[u32], num_batches: usize, batch_size: usize) {
-        let mut opt = crate::optimizer::Naive::new(0.05);
+        let mut opt = crate::optimizer::Naive::new(0.01);
         for i in 0..num_batches {
             let poses = Tensor::raw(
                 &[batch_size, self.num_tokens],

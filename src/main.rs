@@ -47,12 +47,12 @@ fn main() {
         head_size,
     );
 
-    gpt.load();
+    //gpt.load();
 
-    gpt.infer(30, |ch| {
+    /*gpt.infer(30, |ch| {
         print!("{}", int_to_ch.get(&ch).unwrap());
         std::io::stdout().flush().unwrap();
-    });
+    });*/
 
     println!();
 

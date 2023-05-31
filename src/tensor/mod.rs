@@ -6,6 +6,7 @@ pub use ops::*;
 pub use utils::*;
 
 use rand::prelude::*;
+use rand_distr::Normal;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::ops::*;
@@ -459,7 +460,13 @@ impl<V: TensorElement> Tensor<V> {
         }
     }
     pub fn rand<R: Rng>(r: &mut R, shape: &[usize]) -> Tensor<f32> {
-        Tensor::<f32>::rand_range(r, -0.0625, 0.0625, shape)
+        let normal = Normal::new(0.0, 0.02).unwrap();
+        Tensor::<f32> {
+            blob: (0..shape.iter().fold(1, |curr, s| curr * s))
+                .map(|_| normal.sample(r))
+                .collect(),
+            shape: shape.to_vec(),
+        }
     }
     pub fn stack<T: TensorOps<V>>(inps: &[T]) -> Self {
         let mut shape = inps

@@ -1,17 +1,11 @@
-mod funcs;
-mod graph;
-mod optimizer;
-mod tensor;
-
-use funcs::*;
-use graph::{Graph, TensorId};
-use optimizer::AdamW;
+use femto_gpt::funcs::*;
+use femto_gpt::graph::{Graph, TensorId};
+use femto_gpt::tensor::{Tensor, TensorMutOps, TensorOps};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::*;
 use std::io::prelude::*;
-use tensor::{Tensor, TensorMutOps, TensorOps};
 
 fn sample_dataset<R: Rng>(
     dataset: &[u32],
@@ -237,9 +231,9 @@ impl<R: Rng> GPT<R> {
         fs::write("pos_embedding.dat", &pos_embed_data).expect("Unable to write file");
     }
 
-    pub fn train(&mut self, dataset: &[u32], batch_size: usize) {
-        let mut opt = AdamW::new(0.00002);
-        for i in 0..1000 {
+    pub fn train(&mut self, dataset: &[u32], num_batches: usize, batch_size: usize) {
+        let mut opt = femto_gpt::optimizer::Naive::new(0.00002);
+        for i in 0..num_batches {
             let poses = Tensor::raw(
                 &[batch_size, self.num_tokens],
                 (0..self.num_tokens as u32)
@@ -275,7 +269,7 @@ impl<R: Rng> GPT<R> {
     }
 
     pub fn infer<F: Fn(u32) -> ()>(&mut self, count: usize, callback: F) {
-        let mut cnt = 0;
+        let mut cnt = 1;
         let mut context = vec![0; self.num_tokens];
         let poses = Tensor::raw(&[1, self.num_tokens], (0..self.num_tokens as u32).collect());
         self.graph
@@ -328,7 +322,7 @@ fn main() {
         .map(|ch| ch_to_int.get(&ch).unwrap().clone())
         .collect::<Vec<_>>();
 
-    let batch_size = 10;
+    let _batch_size = 10;
     let num_tokens = 64;
     let vocab_size = chars.len();
     let embedding_degree = 64;
@@ -346,10 +340,15 @@ fn main() {
         head_size,
     );
 
+    gpt.load();
+
     gpt.infer(100, |ch| {
         print!("{}", int_to_ch.get(&ch).unwrap());
         std::io::stdout().flush().unwrap();
-    })
+    });
+
+    gpt.train(&dataset, 10, 10);
+    gpt.save();
 
     /*println!(
         "Params: {}",

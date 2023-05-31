@@ -141,7 +141,7 @@ fn main() {
                 &[kq_coeff],
             );
             let soft_masked_kq = g.call(Softmax::new(), &[masked_kq]);
-            let dropped_soft_masked_kq = g.call(Dropout::new(0.2), &[soft_masked_kq]);
+            let dropped_soft_masked_kq = g.call(Dropout::new(0.05), &[soft_masked_kq]);
             let atten = g.call(MatMul::new(), &[dropped_soft_masked_kq, v]);
             heads.push(atten);
         }
@@ -152,7 +152,7 @@ fn main() {
         let proj_cat = g.call(MatMul::new(), &[cat, proj_params]);
 
         let proj_cat_bias = g.call(Add::new(), &[proj_cat, proj_bias_params]);
-        let dropped_proj_cat_bias = g.call(Dropout::new(0.2), &[proj_cat_bias]);
+        let dropped_proj_cat_bias = g.call(Dropout::new(0.05), &[proj_cat_bias]);
 
         let add_atten = g.call(Add::new(), &[norm_inp, dropped_proj_cat_bias]);
         let add_atten_norm_coeff = g.alloc_param(&mut rng, &[embedding_degree]);
@@ -271,7 +271,7 @@ fn main() {
         g.optimize(&mut opt, &params.iter().cloned().collect());
         unembed(&xs, g.get(char_inp), &mut embedding);
         unembed(&poses, g.get(pos_inp), &mut pos_embedding);
-        if i % 1 == 0 {
+        if i != 0 && i % 1 == 0 {
             for p in params.iter() {
                 if *p != char_inp || *p != pos_inp {
                     let data = bincode::serialize(g.get(*p)).unwrap();

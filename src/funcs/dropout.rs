@@ -9,7 +9,7 @@ impl Dropout {
     pub fn new(rate: f32) -> Box<dyn Function> {
         Box::new(Self {
             rate,
-            mask: Tensor::scalar(0.),
+            mask: Tensor::scalar(1.),
         })
     }
 }
@@ -23,6 +23,7 @@ impl Function for Dropout {
             self.mask = rnd.map_values(|v| if v > self.rate { scale } else { 0. });
             inps[0] * &self.mask
         } else {
+            self.mask = Tensor::scalar(1.);
             inps[0].clone()
         }
     }

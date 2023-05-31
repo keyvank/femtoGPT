@@ -58,10 +58,10 @@ fn select<T: TensorOps<f32>>(t: &T) -> u32 {
     let mut rng = rand::thread_rng();
     let mut ts = t.blob().iter().cloned().enumerate().collect::<Vec<_>>();
     ts.sort_by_key(|(_, b)| (b * 1000.) as u32);
+    let dice = rng.gen_range(0f32..1f32);
     let mut accum = 0.;
     for (id, t) in ts.iter().rev() {
         accum += t;
-        let dice = rng.gen_range(0f32..1f32);
         if dice < accum {
             return *id as u32;
         }

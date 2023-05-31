@@ -1,4 +1,4 @@
-use super::{Function, Tensor, TensorMutOps, TensorOps};
+use super::{Function, Tensor, TensorOps};
 use rayon::prelude::*;
 
 #[derive(Debug)]

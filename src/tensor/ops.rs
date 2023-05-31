@@ -129,19 +129,6 @@ impl<'a, V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V
     }
 }
 
-impl<V: TensorElement + std::ops::Neg<Output = V>> Neg for &Tensor<V> {
-    type Output = Tensor<V>;
-    fn neg(self) -> Self::Output {
-        -&self.view()
-    }
-}
-impl<'a, V: TensorElement + std::ops::Neg<Output = V>> Neg for &TensorView<'a, V> {
-    type Output = Tensor<V>;
-    fn neg(self) -> Self::Output {
-        self.map_values(|f| -f)
-    }
-}
-
 impl Not for &Tensor<bool> {
     type Output = Tensor<bool>;
 

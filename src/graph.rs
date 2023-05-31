@@ -6,21 +6,6 @@ use std::collections::{HashMap, HashSet};
 
 pub type TensorId = usize;
 
-struct Shape {
-    is_batched: bool,
-    shape: Vec<usize>,
-}
-
-impl Shape {
-    fn matches(&self, shape: &[usize]) -> bool {
-        if self.is_batched {
-            shape.len() == self.shape.len() + 1 && shape[1..] == self.shape
-        } else {
-            shape == self.shape
-        }
-    }
-}
-
 struct Computation {
     inps: Vec<TensorId>,
     out: TensorId,
@@ -31,7 +16,6 @@ pub struct Graph {
     tensors: HashMap<TensorId, Tensor<f32>>,
     grads: HashMap<TensorId, Tensor<f32>>,
     computations: Vec<Computation>,
-    shapes: HashMap<TensorId, Shape>,
 }
 
 impl Graph {
@@ -40,32 +24,10 @@ impl Graph {
             tensors: Default::default(),
             grads: Default::default(),
             computations: Default::default(),
-            shapes: Default::default(),
         }
     }
-    pub fn alloc_param<R: Rng>(&mut self, rng: &mut R, shape: &[usize]) -> TensorId {
-        let id = self.alloc(Tensor::<f32>::rand(rng, shape));
-        self.shapes.insert(
-            id,
-            Shape {
-                is_batched: false,
-                shape: shape.to_vec(),
-            },
-        );
-        id
-    }
-    pub fn alloc_input(&mut self, shape: &[usize]) -> TensorId {
-        let mut final_shape = shape.to_vec();
-        final_shape.insert(0, 1);
-        let id = self.alloc(Tensor::<f32>::rand(&mut rand::thread_rng(), &final_shape));
-        self.shapes.insert(
-            id,
-            Shape {
-                is_batched: true,
-                shape: shape.to_vec(),
-            },
-        );
-        id
+    pub fn alloc_rand<R: Rng>(&mut self, rng: &mut R, shape: &[usize]) -> TensorId {
+        self.alloc(Tensor::<f32>::rand(rng, shape))
     }
     fn alloc(&mut self, t: Tensor<f32>) -> TensorId {
         let id = self.tensors.len();
@@ -73,9 +35,6 @@ impl Graph {
         id
     }
     pub fn load<T: TensorOps<f32>>(&mut self, tensor_id: TensorId, tensor: &T) {
-        if let Some(shape) = self.shapes.get(&tensor_id) {
-            assert!(shape.matches(tensor.shape()));
-        }
         self.tensors.insert(tensor_id, tensor.view().into());
     }
     pub fn zero_grad(&mut self) {
@@ -134,46 +93,6 @@ impl Graph {
         }
 
         loss.mean()
-    }
-    pub fn gradient_check(&mut self, id: TensorId) {
-        const EPSILON: f32 = 1e-5;
-        for comp in self.computations.iter_mut() {
-            for i in 0..comp.inps.len() {
-                let mut inps = comp
-                    .inps
-                    .iter()
-                    .map(|id| {
-                        Tensor::<f32>::rand_range(
-                            &mut rand::thread_rng(),
-                            -0.1,
-                            0.1,
-                            self.tensors[id].shape(),
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                let inp_val = inps[i].clone();
-
-                inps[i] = (&inp_val + &Tensor::scalar(EPSILON));
-                let out_plus = comp.func.run(&inps.iter().collect::<Vec<_>>(), false);
-
-                inps[i] = (&inp_val - &Tensor::scalar(EPSILON));
-                let out_minus = comp.func.run(&inps.iter().collect::<Vec<_>>(), false);
-
-                let numeric = &(&out_plus - &out_minus) * &Tensor::scalar(0.5 / EPSILON);
-                inps[i] = inp_val.clone();
-                let out = comp.func.run(&inps.iter().collect::<Vec<_>>(), false);
-                let symbolic = comp.func.grad(
-                    &inps.iter().collect::<Vec<_>>(),
-                    &out,
-                    &Tensor::ones(out.shape()),
-                )[i]
-                    .clone();
-
-                let num_sum = numeric.blob().iter().sum::<f32>();
-                let sym_sum = symbolic.blob().iter().sum::<f32>();
-                let diff = num_sum / sym_sum;
-            }
-        }
     }
     pub fn forward(&mut self, training: bool) {
         for c in self.computations.iter_mut() {

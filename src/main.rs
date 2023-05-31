@@ -81,7 +81,7 @@ fn main() {
         .into_iter()
         .collect::<Vec<_>>();
     chars.sort();
-    let int_to_ch = chars
+    let _int_to_ch = chars
         .iter()
         .enumerate()
         .map(|(i, ch)| (i as u32, *ch))
@@ -109,8 +109,8 @@ fn main() {
     let mut embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
     let mut pos_embedding = Tensor::<f32>::rand(&mut rng, &[num_tokens, embedding_degree]);
 
-    let char_inp = g.alloc_input(&[num_tokens, embedding_degree]);
-    let pos_inp = g.alloc_input(&[num_tokens, embedding_degree]);
+    let char_inp = g.alloc_rand(&mut rng, &[batch_size, num_tokens, embedding_degree]);
+    let pos_inp = g.alloc_rand(&mut rng, &[batch_size, num_tokens, embedding_degree]);
     let inp = g.call(Add::new(), &[char_inp, pos_inp]);
 
     let mut params: Vec<TensorId> = Vec::new();
@@ -119,15 +119,15 @@ fn main() {
 
     let mut curr_inp = inp;
     for _ in 0..num_attentions {
-        let norm_coeff = g.alloc_param(&mut rng, &[embedding_degree]);
-        let norm_bias = g.alloc_param(&mut rng, &[embedding_degree]);
+        let norm_coeff = g.alloc_rand(&mut rng, &[embedding_degree]);
+        let norm_bias = g.alloc_rand(&mut rng, &[embedding_degree]);
         params.extend(&[norm_coeff, norm_bias]);
         let norm_inp = g.call(LayerNorm::new(), &[curr_inp, norm_coeff, norm_bias]);
         let mut heads = Vec::new();
         for _i in 0..num_heads {
-            let k_params = g.alloc_param(&mut rng, &[embedding_degree, head_size]);
-            let q_params = g.alloc_param(&mut rng, &[embedding_degree, head_size]);
-            let v_params = g.alloc_param(&mut rng, &[embedding_degree, head_size]);
+            let k_params = g.alloc_rand(&mut rng, &[embedding_degree, head_size]);
+            let q_params = g.alloc_rand(&mut rng, &[embedding_degree, head_size]);
+            let v_params = g.alloc_rand(&mut rng, &[embedding_degree, head_size]);
             params.extend(&[k_params, q_params, v_params]);
             let k = g.call(MatMul::new(), &[norm_inp, k_params]);
             let q = g.call(MatMul::new(), &[norm_inp, q_params]);
@@ -147,25 +147,25 @@ fn main() {
         }
         let cat = g.call(Cat::new(), &heads);
 
-        let proj_params = g.alloc_param(&mut rng, &[num_heads * head_size, embedding_degree]);
-        let proj_bias_params = g.alloc_param(&mut rng, &[embedding_degree]);
+        let proj_params = g.alloc_rand(&mut rng, &[num_heads * head_size, embedding_degree]);
+        let proj_bias_params = g.alloc_rand(&mut rng, &[embedding_degree]);
         let proj_cat = g.call(MatMul::new(), &[cat, proj_params]);
 
         let proj_cat_bias = g.call(Add::new(), &[proj_cat, proj_bias_params]);
         let dropped_proj_cat_bias = g.call(Dropout::new(0.05), &[proj_cat_bias]);
 
         let add_atten = g.call(Add::new(), &[norm_inp, dropped_proj_cat_bias]);
-        let add_atten_norm_coeff = g.alloc_param(&mut rng, &[embedding_degree]);
-        let add_atten_norm_bias = g.alloc_param(&mut rng, &[embedding_degree]);
+        let add_atten_norm_coeff = g.alloc_rand(&mut rng, &[embedding_degree]);
+        let add_atten_norm_bias = g.alloc_rand(&mut rng, &[embedding_degree]);
         let add_atten_norm = g.call(
             LayerNorm::new(),
             &[add_atten, add_atten_norm_coeff, add_atten_norm_bias],
         );
 
-        let lin1_params = g.alloc_param(&mut rng, &[embedding_degree, 4 * embedding_degree]);
-        let bias1_params = g.alloc_param(&mut rng, &[4 * embedding_degree]);
-        let lin2_params = g.alloc_param(&mut rng, &[4 * embedding_degree, embedding_degree]);
-        let bias2_params = g.alloc_param(&mut rng, &[embedding_degree]);
+        let lin1_params = g.alloc_rand(&mut rng, &[embedding_degree, 4 * embedding_degree]);
+        let bias1_params = g.alloc_rand(&mut rng, &[4 * embedding_degree]);
+        let lin2_params = g.alloc_rand(&mut rng, &[4 * embedding_degree, embedding_degree]);
+        let bias2_params = g.alloc_rand(&mut rng, &[embedding_degree]);
 
         let lin1_result = g.call(MatMul::new(), &[add_atten_norm, lin1_params]);
         let lin1_bias_result = g.call(Add::new(), &[lin1_result, bias1_params]);
@@ -187,12 +187,12 @@ fn main() {
         curr_inp = g.call(Add::new(), &[add_atten_norm, lin2_bias_result]);
     }
 
-    let norm_out_coeff = g.alloc_param(&mut rng, &[embedding_degree]);
-    let norm_out_bias = g.alloc_param(&mut rng, &[embedding_degree]);
+    let norm_out_coeff = g.alloc_rand(&mut rng, &[embedding_degree]);
+    let norm_out_bias = g.alloc_rand(&mut rng, &[embedding_degree]);
     params.extend(&[norm_out_coeff, norm_out_bias]);
     let norm_out = g.call(LayerNorm::new(), &[curr_inp, norm_out_coeff, norm_out_bias]);
-    let to_vocab = g.alloc_param(&mut rng, &[embedding_degree, vocab_size]);
-    let to_vocab_bias = g.alloc_param(&mut rng, &[vocab_size]);
+    let to_vocab = g.alloc_rand(&mut rng, &[embedding_degree, vocab_size]);
+    let to_vocab_bias = g.alloc_rand(&mut rng, &[vocab_size]);
     let result_lin = g.call(MatMul::new(), &[norm_out, to_vocab]);
     let result = g.call(Add::new(), &[result_lin, to_vocab_bias]);
     params.extend(&[to_vocab, to_vocab_bias]);

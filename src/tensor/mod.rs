@@ -39,13 +39,6 @@ impl<'a, V: TensorElement> TensorView<'a, V> {
         self.shape.remove(0);
         self.offset += sub_size * ind;
     }
-    pub fn zoom_slice(&mut self, offset: usize, count: usize) {
-        assert!(offset + count <= self.shape[0]);
-        let sub_size = self.size() / self.len();
-        self.shape.remove(0);
-        self.shape.insert(0, count);
-        self.offset += sub_size * offset;
-    }
 }
 
 impl<'a, V: TensorElement> TensorMutView<'a, V> {
@@ -54,13 +47,6 @@ impl<'a, V: TensorElement> TensorMutView<'a, V> {
         let sub_size = self.size() / self.len();
         self.shape.remove(0);
         self.offset += sub_size * ind;
-    }
-    pub fn zoom_slice(&mut self, offset: usize, count: usize) {
-        assert!(offset + count <= self.shape[0]);
-        let sub_size = self.size() / self.len();
-        self.shape.remove(0);
-        self.shape.insert(0, count);
-        self.offset += sub_size * offset;
     }
 }
 
@@ -148,11 +134,6 @@ pub trait TensorMutOps<V: TensorElement>: TensorOps<V> {
     fn get_mut(&mut self, ind: usize) -> TensorMutView<V> {
         let mut v = self.view_mut();
         v.zoom(ind);
-        v
-    }
-    fn get_slice_mut(&mut self, offset: usize, count: usize) -> TensorMutView<V> {
-        let mut v = self.view_mut();
-        v.zoom_slice(offset, count);
         v
     }
     fn iter_mut<'a>(&'a mut self) -> TensorIterMut<'a, V, Self> {
@@ -323,12 +304,6 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
     fn get(&self, ind: usize) -> TensorView<V> {
         let mut v = self.view();
         v.zoom(ind);
-        v
-    }
-
-    fn get_slice(&self, offset: usize, count: usize) -> TensorView<V> {
-        let mut v = self.view();
-        v.zoom_slice(offset, count);
         v
     }
 

@@ -9,7 +9,6 @@ impl MatMul {
 }
 impl Function for MatMul {
     fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Tensor<f32> {
-        assert_eq!(inps.len(), 2);
         inps[0] ^ inps[1]
     }
     fn grad(
@@ -18,7 +17,6 @@ impl Function for MatMul {
         _out: &Tensor<f32>,
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
-        assert_eq!(inps.len(), 2);
         vec![
             out_grad ^ &inps[1].transpose(),
             &inps[0].transpose() ^ out_grad,

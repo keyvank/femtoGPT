@@ -454,6 +454,27 @@ impl<V: TensorElement> Tensor<V> {
     pub fn ones(shape: &[usize]) -> Self {
         Self::constant(shape, V::one())
     }
+
+    pub fn jacobian<F: Fn(usize, usize) -> V + Sync + Send>(n: usize, f: F) -> Tensor<V> {
+        let mut blob = (0..n * n)
+            .into_par_iter()
+            .map(|work| {
+                let i = work / n;
+                let j = work % n;
+                if j >= i {
+                    f(i, j)
+                } else {
+                    V::zero()
+                }
+            })
+            .collect::<Vec<_>>();
+        for i in 0..n {
+            for j in 0..i {
+                blob[i * n + j] = blob[j * n + i];
+            }
+        }
+        Tensor::raw(&[n, n], blob)
+    }
     pub fn rand_range<R: Rng>(r: &mut R, start: f32, end: f32, shape: &[usize]) -> Tensor<f32> {
         Tensor::<f32> {
             blob: (0..shape.iter().fold(1, |curr, s| curr * s))

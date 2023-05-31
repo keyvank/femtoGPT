@@ -34,23 +34,15 @@ impl Function for Softmax {
     ) -> Vec<Tensor<f32>> {
         let jacobian = out.map(1, |l| {
             let n = l.shape()[0];
-            Tensor::raw(
-                &[n, n],
-                (0..n * n)
-                    .into_par_iter()
-                    .map(|work| {
-                        let i = work / n;
-                        let si = l.blob()[i];
-                        let j = work % n;
-                        if i == j {
-                            si * (1. - si)
-                        } else {
-                            let sj = l.blob()[j];
-                            -si * sj
-                        }
-                    })
-                    .collect(),
-            )
+            Tensor::jacobian(n, |i, j| {
+                let si = l.blob()[i];
+                if i == j {
+                    si * (1. - si)
+                } else {
+                    let sj = l.blob()[j];
+                    -si * sj
+                }
+            })
         });
 
         let out = &jacobian ^ &out_grad.unsqueeze(-1);

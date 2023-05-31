@@ -96,7 +96,7 @@ fn main() {
         .map(|ch| ch_to_int.get(&ch).unwrap().clone())
         .collect::<Vec<_>>();
 
-    let batch_size = 100;
+    let batch_size = 10;
     let num_tokens = 64;
     let vocab_size = chars.len();
     let embedding_degree = 64;
@@ -223,7 +223,7 @@ fn main() {
         pos_embedding = bincode::deserialize(&bytes).unwrap();
     }
 
-    {
+    /*{
         let mut cnt = 1;
         let mut context = vec![0; num_tokens];
         let poses = Tensor::raw(
@@ -250,7 +250,7 @@ fn main() {
         }
         println!();
         return;
-    }
+    }*/
 
     let mut opt = AdamW::new(0.00002);
     for i in 0..1000 {

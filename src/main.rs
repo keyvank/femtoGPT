@@ -96,14 +96,14 @@ fn main() {
         .map(|ch| ch_to_int.get(&ch).unwrap().clone())
         .collect::<Vec<_>>();
 
-    let batch_size = 3;
+    let batch_size = 100;
     let num_tokens = 64;
     let vocab_size = chars.len();
-    let embedding_degree = 384;
+    let embedding_degree = 64;
 
     let num_attentions = 6;
-    let num_heads = 6;
-    let head_size = 64;
+    let num_heads = 8;
+    let head_size = 8;
     let head_size_sqrt_inv = 0.125;
 
     let mut embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
@@ -223,8 +223,37 @@ fn main() {
         pos_embedding = bincode::deserialize(&bytes).unwrap();
     }
 
-    let mut opt = AdamW::new(0.00006);
-    for i in 0..100 {
+    {
+        let mut cnt = 1;
+        let mut context = vec![0; num_tokens];
+        let poses = Tensor::raw(
+            &[1, num_tokens],
+            (0..num_tokens as u32).cycle().take(num_tokens).collect(),
+        );
+        g.load(pos_inp, &embed(&poses, &pos_embedding));
+        for _ in 0..512 {
+            g.load(
+                char_inp,
+                &embed(&Tensor::raw(&[1, num_tokens], context.clone()), &embedding),
+            );
+            g.forward(false);
+            let next_ch = select(&g.get(result).get(0).get(cnt - 1));
+            print!("{}", int_to_ch.get(&next_ch).unwrap());
+            std::io::stdout().flush();
+            if cnt == 64 {
+                context.remove(0);
+                context.push(0);
+                cnt -= 1;
+            }
+            context[cnt] = next_ch;
+            cnt += 1;
+        }
+        println!();
+        return;
+    }
+
+    let mut opt = AdamW::new(0.00002);
+    for i in 0..1000 {
         let poses = Tensor::raw(
             &[batch_size, num_tokens],
             (0..num_tokens as u32)
@@ -238,11 +267,11 @@ fn main() {
         g.forward(true);
         g.zero_grad();
         let err = g.backward_all(result, CrossEntropy::new(vocab_size as u32, ys.clone()));
-        println!("Loss: {}", err);
+        println!("Step: {} Loss: {}", i, err);
         g.optimize(&mut opt, &params.iter().cloned().collect());
         unembed(&xs, g.get(char_inp), &mut embedding);
         unembed(&poses, g.get(pos_inp), &mut pos_embedding);
-        if i % 10 == 0 {
+        if i % 1 == 0 {
             for p in params.iter() {
                 if *p != char_inp || *p != pos_inp {
                     let data = bincode::serialize(g.get(*p)).unwrap();
@@ -255,33 +284,5 @@ fn main() {
             fs::write("pos_embedding.dat", &pos_embed_data).expect("Unable to write file");
             println!("Saved");
         }
-
-        /*{
-            let mut cnt = 1;
-            let mut context = vec![0; num_tokens];
-            let poses = Tensor::raw(
-                &[1, num_tokens],
-                (0..num_tokens as u32).cycle().take(num_tokens).collect(),
-            );
-            g.load(pos_inp, &embed(&poses, &pos_embedding));
-            for _ in 0..256 {
-                g.load(
-                    char_inp,
-                    &embed(&Tensor::raw(&[1, num_tokens], context.clone()), &embedding),
-                );
-                g.forward(false);
-                let next_ch = select(&g.get(result).get(0).get(cnt - 1));
-                print!("{}",int_to_ch.get(&next_ch).unwrap());
-                std::io::stdout().flush();
-                if cnt == 64 {
-                    context.remove(0);
-                    context.push(0);
-                    cnt -= 1;
-                }
-                context[cnt] = next_ch;
-                cnt += 1;
-            }
-            println!();
-        }*/
     }
 }

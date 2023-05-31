@@ -40,13 +40,12 @@ impl Function for Softmax {
                     .into_par_iter()
                     .map(|work| {
                         let i = work / n;
+                        let si = l.blob()[i];
                         let j = work % n;
                         if i == j {
-                            let sij = l.get(i).scalar();
-                            sij * (1. - sij)
+                            si * (1. - si)
                         } else {
-                            let si = l.get(i).scalar();
-                            let sj = l.get(j).scalar();
+                            let sj = l.blob()[j];
                             -si * sj
                         }
                     })

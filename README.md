@@ -1,4 +1,4 @@
-# femtoGPT
+# :robot: femtoGPT
 
 femtoGPT is a pure Rust implementation of a minimal Generative Pretrained Transformer.
 
@@ -11,9 +11,19 @@ The architecture is very similar/almost identical with Andrej Karpathy's
 femtoGPT is a great start for those who are fascinated by LLMs and would like to
 understand how these models work in very deep levels.
 
-femtoGPT uses nothing but a random generation library (`rand`), data-serialization
+femtoGPT uses nothing but random generation libraries (`rand`/`rand-distr`), data-serialization
 libraries (`serde`/`bincode` for saving/loading already trained models) and a
 parallel computing library (`rayon`).
+
+femtoGPT is ***EXTREMELY SLOW***, since most of the primitive operations (E.g Matrix multiplication) 
+are implemented in the simplest way possible.
+
+Correctness of gradients is checked using gradient-check method, though it still is very 
+possible that some layers are implemented wrongly. (E.g I'm not sure if my LayerNorm is 
+bug-free?)
+
+**HELP! IF YOU HAVE A COMPUTER WITH PLENTY OF CPUS AND YOU DON'T MIND RUNNING femtoGPT 
+FOR A FEW HOURS/DAYS, YOU CAN HELP THIS PROJECT A GREAT DEAL!**
 
 ## Output samples
 

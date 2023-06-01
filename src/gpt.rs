@@ -198,41 +198,46 @@ impl<R: Rng> GPT<R> {
     }
 
     pub fn load(&mut self) {
-        for p in self.params.iter() {
-            if *p != self.token_input || *p != self.pos_input {
-                let mut tensor_file = File::open(format!("tensor_{}.dat", p)).unwrap();
-                let mut bytes = Vec::new();
-                tensor_file.read_to_end(&mut bytes).unwrap();
-                let t: Tensor<f32> = bincode::deserialize(&bytes).unwrap();
-                self.graph.load(*p, &t);
+        if std::path::Path::new("train_data").is_dir() {
+            for p in self.params.iter() {
+                if *p != self.token_input || *p != self.pos_input {
+                    let mut tensor_file =
+                        File::open(format!("train_data/tensor_{}.dat", p)).unwrap();
+                    let mut bytes = Vec::new();
+                    tensor_file.read_to_end(&mut bytes).unwrap();
+                    let t: Tensor<f32> = bincode::deserialize(&bytes).unwrap();
+                    self.graph.load(*p, &t);
+                }
             }
-        }
-        let mut embed_data = File::open("embedding.dat").unwrap();
-        let mut bytes = Vec::new();
-        embed_data.read_to_end(&mut bytes).unwrap();
-        self.token_embedding = bincode::deserialize(&bytes).unwrap();
+            let mut embed_data = File::open("train_data/embedding.dat").unwrap();
+            let mut bytes = Vec::new();
+            embed_data.read_to_end(&mut bytes).unwrap();
+            self.token_embedding = bincode::deserialize(&bytes).unwrap();
 
-        let mut pos_embed_data = File::open("pos_embedding.dat").unwrap();
-        let mut bytes = Vec::new();
-        pos_embed_data.read_to_end(&mut bytes).unwrap();
-        self.pos_embedding = bincode::deserialize(&bytes).unwrap();
+            let mut pos_embed_data = File::open("train_data/pos_embedding.dat").unwrap();
+            let mut bytes = Vec::new();
+            pos_embed_data.read_to_end(&mut bytes).unwrap();
+            self.pos_embedding = bincode::deserialize(&bytes).unwrap();
+        }
     }
 
     pub fn save(&self) {
+        fs::create_dir_all("train_data").unwrap();
         for p in self.params.iter() {
             if *p != self.token_input || *p != self.pos_input {
                 let data = bincode::serialize(self.graph.get(*p)).unwrap();
-                fs::write(format!("tensor_{}.dat", p), &data).expect("Unable to write file");
+                fs::write(format!("train_data/tensor_{}.dat", p), &data)
+                    .expect("Unable to write file");
             }
         }
         let embed_data = bincode::serialize(&self.token_embedding).unwrap();
-        fs::write("embedding.dat", &embed_data).expect("Unable to write file");
+        fs::write("train_data/embedding.dat", &embed_data).expect("Unable to write file");
         let pos_embed_data = bincode::serialize(&self.pos_embedding).unwrap();
-        fs::write("pos_embedding.dat", &pos_embed_data).expect("Unable to write file");
+        fs::write("train_data/pos_embedding.dat", &pos_embed_data).expect("Unable to write file");
     }
 
     pub fn train(&mut self, dataset: &[u32], num_batches: usize, batch_size: usize) {
-        let mut opt = crate::optimizer::Naive::new(0.01);
+        let mut opt = crate::optimizer::AdamW::new(0.00003);
         for i in 0..num_batches {
             let poses = Tensor::raw(
                 &[batch_size, self.num_tokens],
@@ -265,7 +270,9 @@ impl<R: Rng> GPT<R> {
                 self.graph.get(self.pos_input),
                 &mut self.pos_embedding,
             );
-            self.save();
+            if i % 10 == 0 {
+                self.save();
+            }
         }
     }
 

@@ -22,8 +22,8 @@ Correctness of gradients is checked using gradient-check method, though it still
 possible that some layers are implemented wrongly. (E.g I'm not sure if my LayerNorm is 
 bug-free?)
 
-**HELP! IF YOU HAVE A COMPUTER WITH PLENTY OF CPUS AND YOU DON'T MIND RUNNING femtoGPT 
-FOR A FEW HOURS/DAYS, YOU CAN HELP THIS PROJECT A GREAT DEAL!**
+**HELP!** *IF YOU HAVE A COMPUTER WITH PLENTY OF CPUS AND YOU DON'T MIND RUNNING femtoGPT 
+FOR A FEW HOURS/DAYS, YOU CAN HELP THIS PROJECT A GREAT DEAL! PLZ CONTACT ME :)*
 
 ## Output samples
 

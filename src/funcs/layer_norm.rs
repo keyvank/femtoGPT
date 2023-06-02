@@ -38,20 +38,19 @@ impl Function for LayerNorm {
     ) -> Vec<Tensor<f32>> {
         let jacobian = inps[0].map(1, |l| {
             let n = l.size();
-            let nf = n as f32;
-            let nf_inv = 1. / nf;
-            let avg = l.blob().iter().sum::<f32>() / nf;
-            let sigma2 = l.blob().iter().map(|f| (f - avg).powi(2)).sum::<f32>() / nf + EPSILON;
+            let n_inv = 1. / n as f32;
+            let avg = l.blob().iter().sum::<f32>() * n_inv;
+            let sigma2 = l.blob().iter().map(|f| (f - avg).powi(2)).sum::<f32>() * n_inv + EPSILON;
             let sigma2_inv = 1. / sigma2;
             let sigma = sigma2.sqrt();
             let sigma_inv = 1. / sigma;
             Tensor::jacobian(n, |i, j| {
                 let a = l.blob()[i];
                 if i == j {
-                    ((1. - nf_inv) * sigma - (a - avg).powi(2) * sigma_inv * nf_inv) * sigma2_inv
+                    ((1. - n_inv) * sigma - (a - avg).powi(2) * sigma_inv * n_inv) * sigma2_inv
                 } else {
                     let b = l.blob()[j];
-                    (-nf_inv * sigma - (b - avg) * (a - avg) * sigma_inv * nf_inv) * sigma2_inv
+                    (-n_inv * sigma - (b - avg) * (a - avg) * sigma_inv * n_inv) * sigma2_inv
                 }
             })
         });

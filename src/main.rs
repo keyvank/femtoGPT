@@ -29,7 +29,7 @@ fn main() {
         .map(|ch| ch_to_int.get(&ch).unwrap().clone())
         .collect::<Vec<_>>();
 
-    let batch_size = 1;
+    let batch_size = 30;
     let num_tokens = 16;
     let vocab_size = chars.len();
     let embedding_degree = 8;
@@ -48,19 +48,14 @@ fn main() {
         femto_gpt::optimizer::AdamW::new(0.00003),
     );
 
+    gpt.load();
+
     gpt.infer(30, |ch| {
         print!("{}", int_to_ch.get(&ch).unwrap());
         std::io::stdout().flush().unwrap();
     });
 
-    gpt.load();
-
     println!();
 
     gpt.train(&dataset, 10000, batch_size);
-
-    /*println!(
-        "Params: {}",
-        params.iter().map(|p| g.get(*p).size()).sum::<usize>()
-    );*/
 }

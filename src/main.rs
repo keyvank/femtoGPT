@@ -6,6 +6,7 @@ use std::io::Write;
 fn main() {
     let mut rng = rand::thread_rng();
 
+    // Create a unique char-to-int mapping for all unique characters inside our dataset
     let dataset_char =
         fs::read_to_string("dataset.txt").expect("Should have been able to read the file");
     let mut chars = dataset_char
@@ -29,13 +30,14 @@ fn main() {
         .map(|ch| ch_to_int.get(&ch).unwrap().clone())
         .collect::<Vec<_>>();
 
-    let batch_size = 30;
-    let num_tokens = 16;
+    let batch_size = 10;
+
+    let num_tokens = 64;
     let vocab_size = chars.len();
-    let embedding_degree = 8;
-    let num_layers = 2;
-    let num_heads = 2;
-    let head_size = 4;
+    let embedding_degree = 64;
+    let num_layers = 6;
+    let num_heads = 4;
+    let head_size = embedding_degree / num_heads;
 
     let mut gpt = GPT::new(
         &mut rng,
@@ -48,14 +50,22 @@ fn main() {
         femto_gpt::optimizer::AdamW::new(0.00003),
     );
 
+    // Load training data from train_data directory (If exists)
     gpt.load();
 
-    gpt.infer(30, |ch| {
+    println!("Generating text:");
+
+    // Generate 100 character with the currently trained model before
+    // starting the training loop.
+    gpt.infer(100, |ch| {
         print!("{}", int_to_ch.get(&ch).unwrap());
         std::io::stdout().flush().unwrap();
     });
 
     println!();
+    println!("Starting the training loop... (This make take hours to converge! be patient!)");
+    println!();
 
-    gpt.train(&dataset, 10000, batch_size);
+    // Training loop!
+    gpt.train(&dataset, 100000, batch_size);
 }

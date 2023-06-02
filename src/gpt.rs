@@ -280,6 +280,7 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
                 &mut self.pos_embedding,
             );
             if i % 10 == 0 {
+                println!("Saving the model...");
                 self.save();
             }
         }

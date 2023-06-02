@@ -52,7 +52,6 @@ impl AdamW {
 
 impl Optimizer for AdamW {
     fn step(&mut self, params: Vec<&mut Tensor<f32>>, grads: Vec<&Tensor<f32>>) {
-        println!("{}", self.t);
         for (t, (param, grad)) in params.into_iter().zip(grads.into_iter()).enumerate() {
             let mv = self
                 .m_v

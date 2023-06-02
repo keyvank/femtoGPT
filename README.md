@@ -15,15 +15,30 @@ femtoGPT uses nothing but random generation libraries (`rand`/`rand-distr`), dat
 libraries (`serde`/`bincode` for saving/loading already trained models) and a
 parallel computing library (`rayon`).
 
-femtoGPT is ***EXTREMELY SLOW***, since most of the primitive operations (E.g Matrix multiplication) 
+femtoGPT is ***EXTREMELY SLOW***, since most of the primitive operations (E.g Matrix multiplication)
 are implemented in the simplest way possible.
 
-Correctness of gradients is checked using gradient-check method, though it still is very 
-possible that some layers are implemented wrongly. (E.g I'm not sure if my LayerNorm is 
+Correctness of gradients is checked using gradient-check method, though it still is very
+possible that some layers are implemented wrongly. (E.g I'm not sure if my LayerNorm is
 bug-free?)
 
-**HELP!** *IF YOU HAVE A COMPUTER WITH PLENTY OF CPUS AND YOU DON'T MIND RUNNING femtoGPT 
+**HELP!** *IF YOU HAVE A COMPUTER WITH PLENTY OF CPUS AND YOU DON'T MIND RUNNING femtoGPT
 FOR A FEW HOURS/DAYS, YOU CAN HELP THIS PROJECT A GREAT DEAL! PLZ CONTACT ME :)*
+
+## Usage
+
+Easy! You'll just need to put the text you want to train your GPT model on, inside
+`dataset.txt`. Make sure it has a small number of unique characters! (E.g. the
+current dataset has only used 65 different unique characters!)
+
+Then you'll need to run:
+
+```
+cargo run --release
+```
+
+It will start training the model and will put the training data in the `train_data`
+directory. You can stop the training and continue later!
 
 ## Output samples
 

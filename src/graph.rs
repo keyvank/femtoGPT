@@ -2,7 +2,7 @@ use crate::funcs::{Function, Loss};
 use crate::optimizer::Optimizer;
 use crate::tensor::*;
 use rand::Rng;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 pub type TensorId = usize;
 
@@ -13,8 +13,8 @@ struct Computation {
 }
 
 pub struct Graph {
-    tensors: HashMap<TensorId, Tensor<f32>>,
-    grads: HashMap<TensorId, Tensor<f32>>,
+    tensors: BTreeMap<TensorId, Tensor<f32>>,
+    grads: BTreeMap<TensorId, Tensor<f32>>,
     computations: Vec<Computation>,
 }
 
@@ -119,7 +119,7 @@ impl Graph {
         });
         child
     }
-    pub fn optimize(&mut self, opt: &mut Box<dyn Optimizer>, params: &HashSet<TensorId>) {
+    pub fn optimize<O: Optimizer>(&mut self, opt: &mut O, params: &HashSet<TensorId>) {
         let (params, grads): (Vec<&mut Tensor<f32>>, Vec<&Tensor<f32>>) = self
             .tensors
             .iter_mut()

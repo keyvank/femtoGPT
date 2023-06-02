@@ -29,13 +29,13 @@ fn main() {
         .map(|ch| ch_to_int.get(&ch).unwrap().clone())
         .collect::<Vec<_>>();
 
-    let batch_size = 10;
-    let num_tokens = 64;
+    let batch_size = 1;
+    let num_tokens = 16;
     let vocab_size = chars.len();
-    let embedding_degree = 64;
-    let num_layers = 6;
-    let num_heads = 8;
-    let head_size = 8;
+    let embedding_degree = 8;
+    let num_layers = 2;
+    let num_heads = 2;
+    let head_size = 4;
 
     let mut gpt = GPT::new(
         &mut rng,
@@ -45,18 +45,19 @@ fn main() {
         num_layers,
         num_heads,
         head_size,
+        femto_gpt::optimizer::AdamW::new(0.00003),
     );
 
-    //gpt.load();
-
-    /*gpt.infer(30, |ch| {
+    gpt.infer(30, |ch| {
         print!("{}", int_to_ch.get(&ch).unwrap());
         std::io::stdout().flush().unwrap();
-    });*/
+    });
+
+    gpt.load();
 
     println!();
 
-    gpt.train(&dataset, 100, batch_size);
+    gpt.train(&dataset, 10000, batch_size);
 
     /*println!(
         "Params: {}",

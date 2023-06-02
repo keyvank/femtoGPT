@@ -1,16 +1,19 @@
+use serde::{Deserialize, Serialize};
+
 use crate::tensor::{Tensor, TensorOps};
 use std::collections::HashMap;
-pub trait Optimizer {
+pub trait Optimizer: Serialize + serde::de::DeserializeOwned {
     fn step(&mut self, params: Vec<&mut Tensor<f32>>, grads: Vec<&Tensor<f32>>);
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Naive {
     learning_rate: f32,
 }
 
 impl Naive {
-    pub fn new(learning_rate: f32) -> Box<dyn Optimizer> {
-        Box::new(Self { learning_rate })
+    pub fn new(learning_rate: f32) -> Self {
+        Self { learning_rate }
     }
 }
 
@@ -24,6 +27,7 @@ impl Optimizer for Naive {
 
 const EPSILON: f32 = 1e-8;
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AdamW {
     learning_rate: f32,
     beta1: f32,
@@ -34,20 +38,21 @@ pub struct AdamW {
 }
 
 impl AdamW {
-    pub fn new(learning_rate: f32) -> Box<dyn Optimizer> {
-        Box::new(Self {
+    pub fn new(learning_rate: f32) -> Self {
+        Self {
             learning_rate,
             beta1: 0.9,
             beta2: 0.999,
             weight_decay: 0.01,
             m_v: HashMap::new(),
             t: 1,
-        })
+        }
     }
 }
 
 impl Optimizer for AdamW {
     fn step(&mut self, params: Vec<&mut Tensor<f32>>, grads: Vec<&Tensor<f32>>) {
+        println!("{}", self.t);
         for (t, (param, grad)) in params.into_iter().zip(grads.into_iter()).enumerate() {
             let mv = self
                 .m_v
@@ -67,7 +72,7 @@ impl Optimizer for AdamW {
             let v_hat_sqrt_inv = v_hat.map_values(|f| self.learning_rate / (f.sqrt() + EPSILON));
 
             *param = &*param - &(&m_hat * &v_hat_sqrt_inv);
-            self.t += 1;
         }
+        self.t += 1;
     }
 }

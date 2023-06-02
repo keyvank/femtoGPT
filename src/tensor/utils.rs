@@ -25,13 +25,13 @@ fn combine_shapes(a: &[usize], b: &[usize]) -> Vec<usize> {
             } else if i >= b.len() {
                 a[a.len() - 1 - i]
             } else {
-                let (a, b) = (a[a.len() - 1 - i], b[b.len() - 1 - i]);
-                if a == b {
-                    a
-                } else if a == 1 {
-                    b
-                } else if b == 1 {
-                    a
+                let (ai, bi) = (a[a.len() - 1 - i], b[b.len() - 1 - i]);
+                if ai == bi {
+                    ai
+                } else if ai == 1 {
+                    bi
+                } else if bi == 1 {
+                    ai
                 } else {
                     panic!("Cannot be combined! {:?} {:?}", a, b)
                 }

@@ -1,5 +1,6 @@
 use crate::funcs::*;
 use crate::graph::{Graph, TensorId};
+use crate::optimizer::Optimizer;
 use crate::tensor::{Tensor, TensorMutOps, TensorOps};
 use rand::Rng;
 
@@ -7,7 +8,7 @@ use std::fs;
 use std::fs::*;
 use std::io::prelude::*;
 
-pub struct GPT<R: Rng> {
+pub struct GPT<O: Optimizer, R: Rng> {
     rng: R,
     graph: Graph,
     vocab_size: usize,
@@ -18,6 +19,7 @@ pub struct GPT<R: Rng> {
     token_input: TensorId,
     pos_input: TensorId,
     output: TensorId,
+    optimizer: O,
 }
 
 fn sample_dataset<R: Rng>(
@@ -76,7 +78,7 @@ fn select<T: TensorOps<f32>>(t: &T) -> u32 {
     panic!();
 }
 
-impl<R: Rng> GPT<R> {
+impl<O: Optimizer, R: Rng> GPT<O, R> {
     pub fn new(
         mut rng: R,
         vocab_size: usize,
@@ -85,6 +87,7 @@ impl<R: Rng> GPT<R> {
         num_layers: usize,
         num_heads: usize,
         head_size: usize,
+        optimizer: O,
     ) -> Self {
         let head_size_sqrt_inv = (head_size as f32).powf(-0.5);
 
@@ -194,13 +197,14 @@ impl<R: Rng> GPT<R> {
             output,
             token_embedding,
             pos_embedding,
+            optimizer,
         }
     }
 
     pub fn load(&mut self) {
         if std::path::Path::new("train_data").is_dir() {
             for p in self.params.iter() {
-                if *p != self.token_input || *p != self.pos_input {
+                if *p != self.token_input && *p != self.pos_input {
                     let mut tensor_file =
                         File::open(format!("train_data/tensor_{}.dat", p)).unwrap();
                     let mut bytes = Vec::new();
@@ -218,13 +222,18 @@ impl<R: Rng> GPT<R> {
             let mut bytes = Vec::new();
             pos_embed_data.read_to_end(&mut bytes).unwrap();
             self.pos_embedding = bincode::deserialize(&bytes).unwrap();
+
+            let mut opt_data = File::open("train_data/optimizer.dat").unwrap();
+            let mut bytes = Vec::new();
+            opt_data.read_to_end(&mut bytes).unwrap();
+            self.optimizer = bincode::deserialize(&bytes).unwrap();
         }
     }
 
     pub fn save(&self) {
         fs::create_dir_all("train_data").unwrap();
         for p in self.params.iter() {
-            if *p != self.token_input || *p != self.pos_input {
+            if *p != self.token_input && *p != self.pos_input {
                 let data = bincode::serialize(self.graph.get(*p)).unwrap();
                 fs::write(format!("train_data/tensor_{}.dat", p), &data)
                     .expect("Unable to write file");
@@ -234,10 +243,11 @@ impl<R: Rng> GPT<R> {
         fs::write("train_data/embedding.dat", &embed_data).expect("Unable to write file");
         let pos_embed_data = bincode::serialize(&self.pos_embedding).unwrap();
         fs::write("train_data/pos_embedding.dat", &pos_embed_data).expect("Unable to write file");
+        let opt_data = bincode::serialize(&self.optimizer).unwrap();
+        fs::write("train_data/optimizer.dat", &opt_data).expect("Unable to write file");
     }
 
     pub fn train(&mut self, dataset: &[u32], num_batches: usize, batch_size: usize) {
-        let mut opt = crate::optimizer::AdamW::new(0.00003);
         for i in 0..num_batches {
             let poses = Tensor::raw(
                 &[batch_size, self.num_tokens],
@@ -259,7 +269,7 @@ impl<R: Rng> GPT<R> {
             );
             println!("Step: {} Loss: {}", i, err);
             self.graph
-                .optimize(&mut opt, &self.params.iter().cloned().collect());
+                .optimize(&mut self.optimizer, &self.params.iter().cloned().collect());
             unembed(
                 &xs,
                 self.graph.get(self.token_input),

@@ -68,9 +68,8 @@ impl Graph {
                 .iter()
                 .map(|id| &self.tensors[id])
                 .collect::<Vec<_>>();
-            let result_out = &self.tensors[&id];
             let grad_out = &self.grads[&id];
-            let grads = comp.func.grad(&inps, result_out, grad_out);
+            let grads = comp.func.grad(&inps, grad_out);
             for (id, grad) in comp.inps.clone().into_iter().zip(grads.into_iter()) {
                 self.add_grad(id, grad);
             }

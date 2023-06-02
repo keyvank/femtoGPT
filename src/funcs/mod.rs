@@ -26,12 +26,7 @@ use super::tensor::*;
 
 pub trait Function: std::fmt::Debug {
     fn run(&mut self, inps: &[&Tensor<f32>], training: bool) -> Tensor<f32>;
-    fn grad(
-        &self,
-        inps: &[&Tensor<f32>],
-        out: &Tensor<f32>,
-        out_grad: &Tensor<f32>,
-    ) -> Vec<Tensor<f32>>;
+    fn grad(&self, inps: &[&Tensor<f32>], out_grad: &Tensor<f32>) -> Vec<Tensor<f32>>;
 }
 
 pub trait Loss: std::fmt::Debug {

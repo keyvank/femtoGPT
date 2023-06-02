@@ -27,12 +27,7 @@ impl Function for Dropout {
             inps[0].clone()
         }
     }
-    fn grad(
-        &self,
-        _inps: &[&Tensor<f32>],
-        _out: &Tensor<f32>,
-        out_grad: &Tensor<f32>,
-    ) -> Vec<Tensor<f32>> {
+    fn grad(&self, _inps: &[&Tensor<f32>], out_grad: &Tensor<f32>) -> Vec<Tensor<f32>> {
         vec![out_grad * &self.mask]
     }
 }

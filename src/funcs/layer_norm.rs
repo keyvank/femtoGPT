@@ -30,12 +30,7 @@ impl Function for LayerNorm {
         });
         &(&self.norm * inps[1]) + inps[2]
     }
-    fn grad(
-        &self,
-        inps: &[&Tensor<f32>],
-        _out: &Tensor<f32>,
-        out_grad: &Tensor<f32>,
-    ) -> Vec<Tensor<f32>> {
+    fn grad(&self, inps: &[&Tensor<f32>], out_grad: &Tensor<f32>) -> Vec<Tensor<f32>> {
         let jacobian = inps[0].map(1, |l| {
             let n = l.size();
             let n_inv = 1. / n as f32;

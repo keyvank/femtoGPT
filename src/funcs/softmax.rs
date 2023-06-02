@@ -1,15 +1,19 @@
 use super::{Function, Tensor, TensorOps};
 
 #[derive(Debug)]
-pub struct Softmax;
+pub struct Softmax {
+    out: Tensor<f32>,
+}
 impl Softmax {
     pub fn new() -> Box<dyn Function> {
-        Box::new(Self {})
+        Box::new(Self {
+            out: Tensor::scalar(0.),
+        })
     }
 }
 impl Function for Softmax {
     fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Tensor<f32> {
-        let result = inps[0].map(1, |l| {
+        self.out = inps[0].map(1, |l| {
             let max = l
                 .blob()
                 .iter()
@@ -22,15 +26,11 @@ impl Function for Softmax {
                 .sum::<f32>();
             l.map_values(|f| (f - max).exp() / sum)
         });
-        result
+
+        self.out.clone()
     }
-    fn grad(
-        &self,
-        _inps: &[&Tensor<f32>],
-        out: &Tensor<f32>,
-        out_grad: &Tensor<f32>,
-    ) -> Vec<Tensor<f32>> {
-        let jacobian = out.map(1, |l| {
+    fn grad(&self, _inps: &[&Tensor<f32>], out_grad: &Tensor<f32>) -> Vec<Tensor<f32>> {
+        let jacobian = self.out.map(1, |l| {
             let n = l.shape()[0];
             Tensor::jacobian(n, |i, j| {
                 let si = l.blob()[i];

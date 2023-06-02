@@ -16,7 +16,7 @@ impl TensorElement for f32 {
     }
 }
 
-impl TensorElement for u32 {
+impl TensorElement for usize {
     fn zero() -> Self {
         0
     }

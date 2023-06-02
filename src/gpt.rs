@@ -23,13 +23,13 @@ pub struct GPT<O: Optimizer, R: Rng> {
 }
 
 fn sample_dataset<R: Rng>(
-    dataset: &[u32],
+    dataset: &[usize],
     batch_size: usize,
     context_size: usize,
     rng: &mut R,
-) -> (Tensor<u32>, Tensor<u32>) {
-    let mut xs: Vec<u32> = Vec::new();
-    let mut ys: Vec<u32> = Vec::new();
+) -> (Tensor<usize>, Tensor<usize>) {
+    let mut xs: Vec<usize> = Vec::new();
+    let mut ys: Vec<usize> = Vec::new();
     for _i in 0..batch_size {
         let start: usize = rng.gen_range(0..dataset.len());
         let all = dataset
@@ -49,30 +49,30 @@ fn sample_dataset<R: Rng>(
     )
 }
 
-fn embed(s: &Tensor<u32>, embedding: &Tensor<f32>) -> Tensor<f32> {
-    s.map(0, |s| embedding.get(s.scalar() as usize).into())
+fn embed(s: &Tensor<usize>, embedding: &Tensor<f32>) -> Tensor<f32> {
+    s.map(0, |s| embedding.get(s.scalar()).into())
 }
 
-fn unembed(s: &Tensor<u32>, s_result: &Tensor<f32>, embedding: &mut Tensor<f32>) -> Tensor<f32> {
+fn unembed(s: &Tensor<usize>, s_result: &Tensor<f32>, embedding: &mut Tensor<f32>) -> Tensor<f32> {
     let _degree = s_result.shape()[s_result.dim() - 1];
     for (ch, embed) in s.blob().iter().zip(s_result.keep_right(1).inners().iter()) {
-        let mut t = embedding.get_mut(*ch as usize);
+        let mut t = embedding.get_mut(*ch);
         t.set(embed.clone());
     }
     Tensor::scalar(0.)
 }
 
-fn select<T: TensorOps<f32>>(t: &T) -> u32 {
+fn select<T: TensorOps<f32>>(t: &T) -> usize {
     let t = Softmax::new().run(&[&Tensor::<f32>::raw(t.shape(), t.blob().to_vec())], false);
     let mut rng = rand::thread_rng();
     let mut ts = t.blob().iter().cloned().enumerate().collect::<Vec<_>>();
-    ts.sort_by_key(|(_, b)| (b * 1000.) as u32);
+    ts.sort_by_key(|(_, b)| (b * 1000.) as usize);
     let dice = rng.gen_range(0f32..1f32);
     let mut accum = 0.;
     for (id, t) in ts.iter().rev() {
         accum += t;
         if dice < accum {
-            return *id as u32;
+            return *id;
         }
     }
     panic!();
@@ -247,11 +247,11 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
         fs::write("train_data/optimizer.dat", &opt_data).expect("Unable to write file");
     }
 
-    pub fn train(&mut self, dataset: &[u32], num_batches: usize, batch_size: usize) {
+    pub fn train(&mut self, dataset: &[usize], num_batches: usize, batch_size: usize) {
         for i in 0..num_batches {
             let poses = Tensor::raw(
                 &[batch_size, self.num_tokens],
-                (0..self.num_tokens as u32)
+                (0..self.num_tokens)
                     .cycle()
                     .take(self.num_tokens * batch_size)
                     .collect(),
@@ -263,10 +263,9 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
                 .load(self.pos_input, &embed(&poses, &self.pos_embedding));
             self.graph.forward(true);
             self.graph.zero_grad();
-            let err = self.graph.backward_all(
-                self.output,
-                CrossEntropy::new(self.vocab_size as u32, ys.clone()),
-            );
+            let err = self
+                .graph
+                .backward_all(self.output, CrossEntropy::new(self.vocab_size, ys.clone()));
             println!("Step: {} Loss: {}", i, err);
             self.graph
                 .optimize(&mut self.optimizer, &self.params.iter().cloned().collect());
@@ -286,10 +285,10 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
         }
     }
 
-    pub fn infer<F: Fn(u32) -> ()>(&mut self, count: usize, callback: F) {
+    pub fn infer<F: Fn(usize) -> ()>(&mut self, count: usize, callback: F) {
         let mut cnt = 1;
         let mut context = vec![0; self.num_tokens];
-        let poses = Tensor::raw(&[1, self.num_tokens], (0..self.num_tokens as u32).collect());
+        let poses = Tensor::raw(&[1, self.num_tokens], (0..self.num_tokens).collect());
         self.graph
             .load(self.pos_input, &embed(&poses, &self.pos_embedding));
         for _ in 0..count {

@@ -193,7 +193,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         Tensor::<bool>::raw(self.shape(), blob)
     }
 
-    fn argmax(&self) -> Tensor<u32>
+    fn argmax(&self) -> Tensor<usize>
     where
         V: std::cmp::PartialOrd,
     {
@@ -206,7 +206,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
                     max_ind = i;
                 }
             }
-            Tensor::scalar(max_ind as u32)
+            Tensor::scalar(max_ind)
         })
     }
 
@@ -269,24 +269,24 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
 
     fn unsqueeze(&self, at: isize) -> TensorView<V> {
         let pos = if at >= 0 {
-            at as usize
+            at
         } else {
-            (self.dim() as isize + at + 1) as usize
+            self.dim() as isize + at + 1
         };
         let mut new_shape = self.shape().to_vec();
-        new_shape.insert(pos, 1);
+        new_shape.insert(pos as usize, 1);
         self.reshape(&new_shape)
     }
 
     fn squeeze(&self, at: isize) -> TensorView<V> {
         let pos = if at >= 0 {
-            at as usize
+            at
         } else {
-            (self.dim() as isize + at) as usize
+            self.dim() as isize + at
         };
-        assert_eq!(self.shape()[pos], 1);
+        assert_eq!(self.shape()[pos as usize], 1);
         let mut new_shape = self.shape().to_vec();
-        new_shape.remove(pos);
+        new_shape.remove(pos as usize);
         self.reshape(&new_shape)
     }
 

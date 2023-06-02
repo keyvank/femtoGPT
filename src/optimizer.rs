@@ -34,7 +34,7 @@ pub struct AdamW {
     beta2: f32,
     weight_decay: f32,
     m_v: HashMap<usize, (Tensor<f32>, Tensor<f32>)>,
-    t: u32,
+    t: usize,
 }
 
 impl AdamW {

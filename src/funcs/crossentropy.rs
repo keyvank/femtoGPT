@@ -3,11 +3,11 @@ use rayon::prelude::*;
 
 #[derive(Debug)]
 pub struct CrossEntropy {
-    classes: u32,
-    target: Tensor<u32>,
+    classes: usize,
+    target: Tensor<usize>,
 }
 impl CrossEntropy {
-    pub fn new(classes: u32, target: Tensor<u32>) -> Box<dyn Loss> {
+    pub fn new(classes: usize, target: Tensor<usize>) -> Box<dyn Loss> {
         Box::new(Self { classes, target })
     }
 }
@@ -24,12 +24,12 @@ impl Loss for CrossEntropy {
             .zip(self.target.blob().par_iter())
             .map(|(o, t)| {
                 let sum = o.blob().iter().map(|f| f.exp()).sum::<f32>();
-                let loss = sum.ln() - o.get(*t as usize).scalar();
+                let loss = sum.ln() - o.get(*t).scalar();
 
-                let grad = (0..self.classes as usize)
+                let grad = (0..self.classes)
                     .map(|c| {
                         let val = o.get(c).scalar().exp();
-                        if *t as usize == c {
+                        if *t == c {
                             val / sum - 1.0
                         } else {
                             val / sum

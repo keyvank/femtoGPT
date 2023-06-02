@@ -17,13 +17,13 @@ fn main() {
     let int_to_ch = chars
         .iter()
         .enumerate()
-        .map(|(i, ch)| (i as u32, *ch))
-        .collect::<HashMap<u32, char>>();
+        .map(|(i, ch)| (i, *ch))
+        .collect::<HashMap<usize, char>>();
     let ch_to_int = chars
         .iter()
         .enumerate()
-        .map(|(i, ch)| (*ch, i as u32))
-        .collect::<HashMap<char, u32>>();
+        .map(|(i, ch)| (*ch, i))
+        .collect::<HashMap<char, usize>>();
     let dataset = dataset_char
         .chars()
         .map(|ch| ch_to_int.get(&ch).unwrap().clone())

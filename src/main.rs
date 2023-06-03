@@ -41,6 +41,8 @@ fn main() {
 
     assert_eq!(num_heads * head_size, embedding_degree);
 
+    println!("Vocab-size: {} unique characters", vocab_size);
+
     let mut gpt = GPT::new(
         &mut rng,
         vocab_size,

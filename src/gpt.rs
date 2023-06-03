@@ -89,8 +89,6 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
         head_size: usize,
         optimizer: O,
     ) -> Self {
-        let head_size_sqrt_inv = (head_size as f32).powf(-0.5);
-
         let mut g = Graph::new();
 
         let token_embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
@@ -100,16 +98,19 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
         let pos_input = g.alloc_rand(&mut rng, &[1, num_tokens, embedding_degree]);
         let inp = g.call(Add::new(), &[token_input, pos_input]);
 
+        // Keep track of tensor-ids of learnable tensors!
         let mut params: Vec<TensorId> = Vec::new();
 
         params.extend(&[token_input, pos_input]);
 
         let mut curr_inp = inp;
         for _ in 0..num_layers {
+            // Normalize input before applying multi-head attention
             let norm_coeff = g.alloc_rand(&mut rng, &[embedding_degree]);
             let norm_bias = g.alloc_rand(&mut rng, &[embedding_degree]);
             params.extend(&[norm_coeff, norm_bias]);
             let norm_inp = g.call(LayerNorm::new(), &[curr_inp, norm_coeff, norm_bias]);
+
             let mut heads = Vec::new();
 
             // Multi-head Attention
@@ -123,6 +124,8 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
                 let v = g.call(MatMul::new(), &[norm_inp, v_params]);
                 let q_t = g.call(Transpose::new(), &[q]);
                 let kq = g.call(MatMul::new(), &[k, q_t]);
+
+                let head_size_sqrt_inv = (head_size as f32).powf(-0.5);
                 let kq_coeff = g.call(Coeff::new(head_size_sqrt_inv), &[kq]);
 
                 let masked_kq = g.call(
@@ -134,15 +137,16 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
                 let atten = g.call(MatMul::new(), &[dropped_soft_masked_kq, v]);
                 heads.push(atten);
             }
-            let cat = g.call(Cat::new(), &heads);
 
+            // Concat head results and project into embedding_degree
+            let cat = g.call(Cat::new(), &heads);
             let proj_params = g.alloc_rand(&mut rng, &[num_heads * head_size, embedding_degree]);
             let proj_bias_params = g.alloc_rand(&mut rng, &[embedding_degree]);
             let proj_cat = g.call(MatMul::new(), &[cat, proj_params]);
-
             let proj_cat_bias = g.call(Add::new(), &[proj_cat, proj_bias_params]);
             let dropped_proj_cat_bias = g.call(Dropout::new(0.05), &[proj_cat_bias]);
 
+            // Add attention results to input and then normalize
             let add_atten = g.call(Add::new(), &[norm_inp, dropped_proj_cat_bias]);
             let add_atten_norm_coeff = g.alloc_rand(&mut rng, &[embedding_degree]);
             let add_atten_norm_bias = g.alloc_rand(&mut rng, &[embedding_degree]);
@@ -151,11 +155,14 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
                 &[add_atten, add_atten_norm_coeff, add_atten_norm_bias],
             );
 
+            // A feed-forward layer:
+            // Linear embedding_degree -> 4*embedding_degree
+            // Relu
+            // Linear 4*embedding_degree -> embedding_degree
             let lin1_params = g.alloc_rand(&mut rng, &[embedding_degree, 4 * embedding_degree]);
             let bias1_params = g.alloc_rand(&mut rng, &[4 * embedding_degree]);
             let lin2_params = g.alloc_rand(&mut rng, &[4 * embedding_degree, embedding_degree]);
             let bias2_params = g.alloc_rand(&mut rng, &[embedding_degree]);
-
             let lin1_result = g.call(MatMul::new(), &[add_atten_norm, lin1_params]);
             let lin1_bias_result = g.call(Add::new(), &[lin1_result, bias1_params]);
             let lin1_act = g.call(Relu::new(), &[lin1_bias_result]);
@@ -176,10 +183,13 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
             curr_inp = g.call(Add::new(), &[add_atten_norm, lin2_bias_result]);
         }
 
+        // Normalize the output after the last layer
         let norm_out_coeff = g.alloc_rand(&mut rng, &[embedding_degree]);
         let norm_out_bias = g.alloc_rand(&mut rng, &[embedding_degree]);
         params.extend(&[norm_out_coeff, norm_out_bias]);
         let norm_out = g.call(LayerNorm::new(), &[curr_inp, norm_out_coeff, norm_out_bias]);
+
+        // Map from embedding_degree to vocab_size through a linear layer
         let to_vocab = g.alloc_rand(&mut rng, &[embedding_degree, vocab_size]);
         let to_vocab_bias = g.alloc_rand(&mut rng, &[vocab_size]);
         let result_lin = g.call(MatMul::new(), &[norm_out, to_vocab]);

@@ -17,6 +17,8 @@ impl Naive {
     }
 }
 
+// Simplest optimizer possible, just reduce gradients
+// from params with a learning_rate coefficient
 impl Optimizer for Naive {
     fn step(&mut self, params: Vec<&mut Tensor<f32>>, grads: Vec<&Tensor<f32>>) {
         for (param, grad) in params.into_iter().zip(grads.into_iter()) {
@@ -50,6 +52,8 @@ impl AdamW {
     }
 }
 
+// Adam optimizer with weight decay!
+// https://pytorch.org/docs/stable/generated/torch.optim.AdamW.html
 impl Optimizer for AdamW {
     fn step(&mut self, params: Vec<&mut Tensor<f32>>, grads: Vec<&Tensor<f32>>) {
         for (t, (param, grad)) in params.into_iter().zip(grads.into_iter()).enumerate() {

@@ -39,6 +39,8 @@ fn main() {
     let num_heads = 4;
     let head_size = embedding_degree / num_heads;
 
+    assert_eq!(num_heads * head_size, embedding_degree);
+
     let mut gpt = GPT::new(
         &mut rng,
         vocab_size,
@@ -49,6 +51,8 @@ fn main() {
         head_size,
         femto_gpt::optimizer::AdamW::new(0.00003),
     );
+
+    println!("Number of parameters: {}", gpt.num_params());
 
     // Load training data from train_data directory (If exists)
     gpt.load();

@@ -201,6 +201,13 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
         }
     }
 
+    pub fn num_params(&self) -> usize {
+        self.params
+            .iter()
+            .map(|p| self.graph.get(*p).size())
+            .sum::<usize>()
+    }
+
     pub fn load(&mut self) {
         if std::path::Path::new("train_data").is_dir() {
             for p in self.params.iter() {

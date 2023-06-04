@@ -3,6 +3,7 @@ use crate::graph::{Graph, TensorId};
 use crate::optimizer::Optimizer;
 use crate::tensor::{Tensor, TensorMutOps, TensorOps};
 use rand::Rng;
+use std::time::Instant;
 
 use std::fs;
 use std::fs::*;
@@ -266,6 +267,7 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
 
     pub fn train(&mut self, dataset: &[usize], num_batches: usize, batch_size: usize) {
         for i in 0..num_batches {
+            let timer = Instant::now();
             let poses = Tensor::raw(
                 &[batch_size, self.num_tokens],
                 (0..self.num_tokens)
@@ -283,7 +285,12 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
             let err = self
                 .graph
                 .backward_all(self.output, CrossEntropy::new(self.vocab_size, ys.clone()));
-            println!("Step: {} Loss: {}", i, err);
+            println!(
+                "Step: {} Loss: {} (Elapsed: {}ms)",
+                i,
+                err,
+                timer.elapsed().as_millis()
+            );
             self.graph
                 .optimize(&mut self.optimizer, &self.params.iter().cloned().collect());
             unembed(

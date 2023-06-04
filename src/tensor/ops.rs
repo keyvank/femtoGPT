@@ -1,27 +1,52 @@
 use super::*;
 
+pub fn binary<
+    'a,
+    V: TensorElement,
+    W: TensorElement,
+    T1: TensorOps<V>,
+    T2: TensorOps<V>,
+    F: Fn(V, V) -> W + Sync + Send,
+>(
+    a: &T1,
+    b: &T2,
+    f: F,
+) -> Tensor<W> {
+    let (a, b, rev) = if a.dim() > b.dim() {
+        (a.view(), b.view(), false)
+    } else {
+        (b.view(), a.view(), true)
+    };
+    a.map(b.dim(), |a| {
+        assert_eq!(a.shape(), b.shape());
+        let (a, b) = if rev { (&b, &a) } else { (&a, &b) };
+        Tensor::raw(
+            a.shape(),
+            a.blob()
+                .par_iter()
+                .zip(b.blob().par_iter())
+                .map(|(a, b)| f(*a, *b))
+                .collect(),
+        )
+    })
+}
+
 impl<'a, V: TensorElement + std::ops::Add<Output = V>> Add for &TensorView<'a, V> {
     type Output = Tensor<V>;
     fn add(self, other: &TensorView<V>) -> Self::Output {
-        combine_map(self, other, 0, |a, b| {
-            Tensor::scalar(a.scalar() + b.scalar())
-        })
+        binary(self, other, |a, b| a + b)
     }
 }
 impl<'a, V: TensorElement + std::ops::Sub<Output = V>> Sub for &TensorView<'a, V> {
     type Output = Tensor<V>;
     fn sub(self, other: &TensorView<V>) -> Self::Output {
-        combine_map(self, other, 0, |a, b| {
-            Tensor::scalar(a.scalar() - b.scalar())
-        })
+        binary(self, other, |a, b| a - b)
     }
 }
 impl<'a, V: TensorElement + std::ops::Mul<Output = V>> Mul for &TensorView<'a, V> {
     type Output = Tensor<V>;
     fn mul(self, other: &TensorView<V>) -> Self::Output {
-        combine_map(self, other, 0, |a, b| {
-            Tensor::scalar(a.scalar() * b.scalar())
-        })
+        binary(self, other, |a, b| a * b)
     }
 }
 impl<'a, V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V>> BitXor
@@ -29,21 +54,43 @@ impl<'a, V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V
 {
     type Output = Tensor<V>;
     fn bitxor(self, other: &TensorView<V>) -> Self::Output {
-        combine_map(self, other, 2, |a, b| {
-            let works = a.shape()[0] * b.shape()[1];
-            let data = (0..works)
-                .into_par_iter()
-                .map(|work| {
-                    let j = work % b.shape()[1];
-                    let i = work / b.shape()[1];
-                    let mut sum = <<V as std::ops::Mul>::Output as std::ops::Add>::Output::zero();
-                    for k in 0..a.shape()[1] {
-                        sum = sum + a.blob()[i * a.shape()[1] + k] * b.blob()[k * b.shape()[1] + j];
-                    }
-                    sum
+        let (a, b, rev) = if self.dim() > other.dim() {
+            (self.view(), other.view(), false)
+        } else {
+            (other.view(), self.view(), true)
+        };
+        a.map(b.dim(), |a| {
+            assert_eq!(a.shape()[..a.dim() - 2], b.shape()[..b.dim() - 2]);
+            let (a, b) = if rev { (&b, &a) } else { (&a, &b) };
+            let data = a
+                .keep_right(2)
+                .inners()
+                .par_iter()
+                .zip(b.keep_right(2).inners().par_iter())
+                .map(|(a, b)| {
+                    let works = a.shape()[0] * b.shape()[1];
+                    let data = (0..works)
+                        .into_par_iter()
+                        .map(|work| {
+                            let j = work % b.shape()[1];
+                            let i = work / b.shape()[1];
+                            let mut sum =
+                                <<V as std::ops::Mul>::Output as std::ops::Add>::Output::zero();
+                            for k in 0..a.shape()[1] {
+                                sum = sum
+                                    + a.blob()[i * a.shape()[1] + k]
+                                        * b.blob()[k * b.shape()[1] + j];
+                            }
+                            sum
+                        })
+                        .collect::<Vec<_>>();
+                    data
                 })
+                .flatten()
                 .collect();
-            Tensor::raw(&[a.shape()[0], b.shape()[1]], data)
+            let mut final_shape = a.shape().to_vec();
+            final_shape[a.dim() - 1] = b.shape()[b.dim() - 1];
+            Tensor::raw(&final_shape, data)
         })
     }
 }

@@ -326,7 +326,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         self.map(2, |m| {
             let d0 = m.shape()[0];
             let d1 = m.shape()[1];
-            let mut dat = Vec::new();
+            let mut dat = Vec::with_capacity(d1 * d0);
             for j in 0..d1 {
                 for i in 0..d0 {
                     dat.push(m.blob()[i * d1 + j]);
@@ -503,7 +503,7 @@ impl<V: TensorElement> Tensor<V> {
         let each_sz = inps.get(0).unwrap().size();
         let group_size = shape.last().unwrap();
         let mut offset = 0;
-        let mut data: Vec<V> = Vec::new();
+        let mut data: Vec<V> = Vec::with_capacity(each_sz * inps.len());
 
         while offset < each_sz {
             for inp in inps {

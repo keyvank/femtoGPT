@@ -29,8 +29,8 @@ fn sample_dataset<R: Rng>(
     context_size: usize,
     rng: &mut R,
 ) -> (Tensor<usize>, Tensor<usize>) {
-    let mut xs: Vec<usize> = Vec::new();
-    let mut ys: Vec<usize> = Vec::new();
+    let mut xs: Vec<usize> = Vec::with_capacity(batch_size * context_size);
+    let mut ys: Vec<usize> = Vec::with_capacity(batch_size * context_size);
     for _i in 0..batch_size {
         let start: usize = rng.gen_range(0..dataset.len());
         let all = dataset

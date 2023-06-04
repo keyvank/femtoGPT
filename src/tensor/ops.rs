@@ -68,10 +68,10 @@ impl<'a, V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V
                 .par_iter()
                 .zip(b.keep_right(2).inners().par_iter())
                 .map(|(a, b)| {
-                    let mut res = Vec::new();
                     let m = a.shape()[0];
                     let n = a.shape()[1];
                     let p = b.shape()[1];
+                    let mut res = Vec::with_capacity(m * p);
                     let a_blob = a.blob();
                     let b_blob = b.blob();
                     for i in 0..m {

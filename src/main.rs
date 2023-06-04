@@ -47,7 +47,7 @@ fn main() {
 
     // Generate 100 character with the currently trained model before
     // starting the training loop.
-    gpt.infer(100, |ch| {
+    gpt.infer(&tokenizer.tokenize("\n"), 100, |ch| {
         print!("{}", tokenizer.untokenize(&[ch]));
         std::io::stdout().flush().unwrap();
     });

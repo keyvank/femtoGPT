@@ -310,9 +310,10 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
         }
     }
 
-    pub fn infer<F: Fn(usize) -> ()>(&mut self, count: usize, callback: F) {
-        let mut cnt = 1;
+    pub fn infer<F: Fn(usize) -> ()>(&mut self, prompt: &[usize], count: usize, callback: F) {
+        let mut cnt = prompt.len();
         let mut context = vec![0; self.num_tokens];
+        context[..prompt.len()].copy_from_slice(prompt);
         let poses = Tensor::raw(&[1, self.num_tokens], (0..self.num_tokens).collect());
         self.graph
             .load(self.pos_input, &embed(&poses, &self.pos_embedding));

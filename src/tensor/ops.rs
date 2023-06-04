@@ -68,23 +68,23 @@ impl<'a, V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V
                 .par_iter()
                 .zip(b.keep_right(2).inners().par_iter())
                 .map(|(a, b)| {
-                    let works = a.shape()[0] * b.shape()[1];
-                    let data = (0..works)
-                        .into_par_iter()
-                        .map(|work| {
-                            let j = work % b.shape()[1];
-                            let i = work / b.shape()[1];
+                    let mut res = Vec::new();
+                    let m = a.shape()[0];
+                    let n = a.shape()[1];
+                    let p = b.shape()[1];
+                    let a_blob = a.blob();
+                    let b_blob = b.blob();
+                    for i in 0..m {
+                        for j in 0..p {
                             let mut sum =
                                 <<V as std::ops::Mul>::Output as std::ops::Add>::Output::zero();
-                            for k in 0..a.shape()[1] {
-                                sum = sum
-                                    + a.blob()[i * a.shape()[1] + k]
-                                        * b.blob()[k * b.shape()[1] + j];
+                            for k in 0..n {
+                                sum = sum + a_blob[i * n + k] * b_blob[k * p + j];
                             }
-                            sum
-                        })
-                        .collect::<Vec<_>>();
-                    data
+                            res.push(sum);
+                        }
+                    }
+                    res
                 })
                 .flatten()
                 .collect();

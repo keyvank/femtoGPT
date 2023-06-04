@@ -17,7 +17,7 @@ impl Loss for CrossEntropy {
         let grad_shape = inp.shape().to_vec();
         let mut loss_shape = grad_shape.clone();
         loss_shape.pop();
-        let (loss, grad): (Vec<Tensor<f32>>, Vec<Tensor<f32>>) = inp
+        let (loss, grad): (Vec<f32>, Vec<Vec<f32>>) = inp
             .keep_right(1)
             .inners()
             .par_iter()
@@ -39,13 +39,13 @@ impl Loss for CrossEntropy {
                     })
                     .collect::<Vec<_>>();
 
-                (Tensor::scalar(loss), Tensor::vector(&grad))
+                (loss, grad)
             })
             .unzip();
 
         (
-            Tensor::stack(&loss).reshape(&loss_shape).into(),
-            Tensor::stack(&grad).reshape(&grad_shape).into(),
+            Tensor::raw(&loss_shape, loss),
+            Tensor::raw(&grad_shape, grad.into_iter().flatten().collect()),
         )
     }
 }

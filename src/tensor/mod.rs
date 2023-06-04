@@ -482,17 +482,6 @@ impl<V: TensorElement> Tensor<V> {
             shape: shape.to_vec(),
         }
     }
-    pub fn stack<T: TensorOps<V>>(inps: &[T]) -> Self {
-        let mut shape = inps
-            .get(0)
-            .expect("No tensors to be concatenated!")
-            .shape()
-            .to_vec();
-        inps.iter().all(|t| t.shape() == shape);
-        let blob = inps.iter().map(|t| t.blob().to_vec()).flatten().collect();
-        shape.insert(0, inps.len());
-        Tensor::raw(&shape, blob)
-    }
     pub fn cat<T: TensorOps<V>>(inps: &[&T]) -> Self {
         let shape = inps
             .get(0)

@@ -1,7 +1,9 @@
 mod elements;
+mod helper;
 mod ops;
 mod utils;
 pub use elements::*;
+pub use helper::*;
 pub use ops::*;
 pub use utils::*;
 

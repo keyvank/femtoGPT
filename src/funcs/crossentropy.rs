@@ -23,24 +23,24 @@ impl Loss for CrossEntropy {
             .par_iter()
             .zip(self.target.blob().par_iter())
             .map(|(o, t)| {
-                let sum = o.blob().iter().map(|f| f.exp()).sum::<f32>();
-                let loss = sum.ln() - o.get(*t).scalar();
+                let o_exps = o.blob().iter().map(|f| f.exp()).collect::<Vec<_>>();
+                let sum = o_exps.iter().sum::<f32>();
+                let loss = sum.ln() - o.blob()[*t];
+                let sum_inv = 1. / sum;
 
                 let grad = (0..self.classes)
                     .map(|c| {
-                        let val = o.get(c).scalar().exp();
+                        let val = o_exps[c];
                         if *t == c {
-                            val / sum - 1.0
+                            val * sum_inv - 1.0
                         } else {
-                            val / sum
+                            val * sum_inv
                         }
                     })
                     .collect::<Vec<_>>();
 
                 (Tensor::scalar(loss), Tensor::vector(&grad))
             })
-            .collect::<Vec<_>>()
-            .into_iter()
             .unzip();
 
         (

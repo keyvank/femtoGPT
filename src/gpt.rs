@@ -54,13 +54,21 @@ fn embed(s: &Tensor<usize>, embedding: &Tensor<f32>) -> Tensor<f32> {
     s.map(0, |s| embedding.get(s.scalar()).into())
 }
 
-fn unembed(s: &Tensor<usize>, s_result: &Tensor<f32>, embedding: &mut Tensor<f32>) -> Tensor<f32> {
-    let _degree = s_result.shape()[s_result.dim() - 1];
+use std::collections::HashMap;
+fn unembed(s: &Tensor<usize>, s_result: &Tensor<f32>, embedding: &mut Tensor<f32>) {
+    let mut embeds: HashMap<usize, Vec<Tensor<f32>>> = HashMap::new();
     for (ch, embed) in s.blob().iter().zip(s_result.keep_right(1).inners().iter()) {
-        let mut t = embedding.get_mut(*ch);
-        t.set(embed.clone());
+        embeds.entry(*ch).or_default().push(embed.clone().into());
     }
-    Tensor::scalar(0.)
+    for (ch, vals) in embeds {
+        let mut avg = Tensor::scalar(0.);
+        for v in vals.iter() {
+            avg = &avg + v;
+        }
+        avg = &avg * &Tensor::scalar(1. / vals.len() as f32);
+        let mut t = embedding.get_mut(ch);
+        t.set(avg.clone());
+    }
 }
 
 fn select<T: TensorOps<f32>>(t: &T) -> usize {

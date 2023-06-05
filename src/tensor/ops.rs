@@ -71,20 +71,21 @@ impl<'a, V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V
                     let m = a.shape()[0];
                     let n = a.shape()[1];
                     let p = b.shape()[1];
-                    let mut res = Vec::with_capacity(m * p);
+                    let mut result = vec![
+                            <<V as std::ops::Mul>::Output as std::ops::Add>::Output::zero();
+                            m * p
+                        ];
                     let a_blob = a.blob();
                     let b_blob = b.blob();
                     for i in 0..m {
-                        for j in 0..p {
-                            let mut sum =
-                                <<V as std::ops::Mul>::Output as std::ops::Add>::Output::zero();
-                            for k in 0..n {
-                                sum = sum + a_blob[i * n + k] * b_blob[k * p + j];
+                        for k in 0..n {
+                            for j in 0..p {
+                                result[i * p + j] =
+                                    result[i * p + j] + a_blob[i * n + k] * b_blob[k * p + j];
                             }
-                            res.push(sum);
                         }
                     }
-                    res
+                    result
                 })
                 .flatten()
                 .collect();

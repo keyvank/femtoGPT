@@ -20,8 +20,8 @@ impl Function for Mask {
         inps[0].map(self.mask.dim(), |t| {
             let dat = t
                 .blob()
-                .par_iter()
-                .zip(self.mask.blob().par_iter())
+                .iter()
+                .zip(self.mask.blob().iter())
                 .map(|(v, m)| if *m == 1. { self.value } else { *v })
                 .collect::<Vec<_>>();
             Tensor::raw(t.shape(), dat)

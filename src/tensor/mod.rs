@@ -447,7 +447,7 @@ impl<V: TensorElement> Tensor<V> {
 
     pub fn jacobian<F: Fn(usize, usize) -> V + Sync + Send>(n: usize, f: F) -> Tensor<V> {
         let mut blob = (0..n * n)
-            .into_par_iter()
+            .into_iter()
             .map(|work| {
                 let i = work / n;
                 let j = work % n;

@@ -23,8 +23,8 @@ pub fn binary<
         Tensor::raw(
             a.shape(),
             a.blob()
-                .par_iter()
-                .zip(b.blob().par_iter())
+                .iter()
+                .zip(b.blob().iter())
                 .map(|(a, b)| f(*a, *b))
                 .collect(),
         )

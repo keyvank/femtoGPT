@@ -44,7 +44,7 @@ impl Function for LayerNorm {
             for i in 0..n {
                 let a = l.blob()[i];
                 let inp1_i = inp1_blob[i];
-                for j in 0..n {
+                for j in 0..i + 1 {
                     let val = if i == j {
                         ((1. - n_inv) * sigma - (a - avg).powi(2) * sigma_inv * n_inv) * sigma2_inv
                     } else {

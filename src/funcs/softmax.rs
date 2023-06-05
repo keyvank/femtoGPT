@@ -32,15 +32,20 @@ impl Function for Softmax {
     fn grad(&self, _inps: &[&Tensor<f32>], out_grad: &Tensor<f32>) -> Vec<Tensor<f32>> {
         let jacobian = self.out.map(1, |l| {
             let n = l.shape()[0];
-            Tensor::jacobian(n, |i, j| {
+            let mut data = vec![0.; n * n];
+            for i in 0..n {
                 let si = l.blob()[i];
-                if i == j {
-                    si * (1. - si)
-                } else {
-                    let sj = l.blob()[j];
-                    -si * sj
+                for j in 0..i + 1 {
+                    data[i * n + j] = if i == j {
+                        si * (1. - si)
+                    } else {
+                        let sj = l.blob()[j];
+                        -si * sj
+                    };
+                    data[j * n + i] = data[i * n + j];
                 }
-            })
+            }
+            Tensor::raw(&[n, n], data)
         });
 
         let out = &jacobian ^ &out_grad.unsqueeze(-1);

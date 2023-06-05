@@ -40,15 +40,22 @@ impl Function for LayerNorm {
             let sigma2_inv = 1. / sigma2;
             let sigma = sigma2.sqrt();
             let sigma_inv = 1. / sigma;
-            Tensor::jacobian(n, |i, j| {
+            let mut data = vec![0.; n * n];
+            for i in 0..n {
                 let a = l.blob()[i];
-                (if i == j {
-                    ((1. - n_inv) * sigma - (a - avg).powi(2) * sigma_inv * n_inv) * sigma2_inv
-                } else {
-                    let b = l.blob()[j];
-                    (-n_inv * sigma - (b - avg) * (a - avg) * sigma_inv * n_inv) * sigma2_inv
-                }) * inp1_blob[j]
-            })
+                let inp1_i = inp1_blob[i];
+                for j in 0..n {
+                    let val = if i == j {
+                        ((1. - n_inv) * sigma - (a - avg).powi(2) * sigma_inv * n_inv) * sigma2_inv
+                    } else {
+                        let b = l.blob()[j];
+                        (-n_inv * sigma - (b - avg) * (a - avg) * sigma_inv * n_inv) * sigma2_inv
+                    };
+                    data[i * n + j] = val * inp1_blob[j];
+                    data[j * n + i] = val * inp1_i;
+                }
+            }
+            Tensor::raw(&[n, n], data)
         });
         let inp0_out = &jacobian ^ &out_grad.unsqueeze(-1);
         vec![

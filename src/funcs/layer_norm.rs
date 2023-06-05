@@ -53,7 +53,7 @@ impl Function for LayerNorm {
                 }
                 let val =
                     ((1. - n_inv) * sigma - (a - avg).powi(2) * sigma_inv * n_inv) * sigma2_inv;
-                data[i * n + i] = val * inp1_blob[i];
+                data[i * n + i] = val * inp1_i;
             }
             Tensor::raw(&[n, n], data)
         });

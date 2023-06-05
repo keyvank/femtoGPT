@@ -446,21 +446,10 @@ impl<V: TensorElement> Tensor<V> {
     }
 
     pub fn jacobian<F: Fn(usize, usize) -> V + Sync + Send>(n: usize, f: F) -> Tensor<V> {
-        let mut blob = (0..n * n)
-            .into_iter()
-            .map(|work| {
-                let i = work / n;
-                let j = work % n;
-                if j >= i {
-                    f(i, j)
-                } else {
-                    V::zero()
-                }
-            })
-            .collect::<Vec<_>>();
+        let mut blob = vec![V::zero(); n * n];
         for i in 0..n {
-            for j in 0..i {
-                blob[i * n + j] = blob[j * n + i];
+            for j in 0..n {
+                blob[i * n + j] = f(i, j);
             }
         }
         Tensor::raw(&[n, n], blob)

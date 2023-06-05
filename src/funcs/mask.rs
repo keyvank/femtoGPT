@@ -1,5 +1,4 @@
 use super::{Function, Tensor, TensorOps};
-use rayon::prelude::*;
 
 #[derive(Debug)]
 pub struct Mask {

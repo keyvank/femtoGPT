@@ -54,24 +54,29 @@ impl<'a, V: TensorElement + std::ops::Mul<Output = V>> Mul<&Tensor<V>> for &Tens
         self * &other.view()
     }
 }
-impl<V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V>> BitXor
-    for &Tensor<V>
+impl<
+        V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V> + std::ops::AddAssign,
+    > BitXor for &Tensor<V>
 {
     type Output = Tensor<V>;
     fn bitxor(self, other: &Tensor<V>) -> Self::Output {
         &self.view() ^ &other.view()
     }
 }
-impl<'a, V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V>>
-    BitXor<&TensorView<'a, V>> for &Tensor<V>
+impl<
+        'a,
+        V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V> + std::ops::AddAssign,
+    > BitXor<&TensorView<'a, V>> for &Tensor<V>
 {
     type Output = Tensor<V>;
     fn bitxor(self, other: &TensorView<'a, V>) -> Self::Output {
         &self.view() ^ other
     }
 }
-impl<'a, V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V>>
-    BitXor<&Tensor<V>> for &TensorView<'a, V>
+impl<
+        'a,
+        V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V> + std::ops::AddAssign,
+    > BitXor<&Tensor<V>> for &TensorView<'a, V>
 {
     type Output = Tensor<V>;
     fn bitxor(self, other: &Tensor<V>) -> Self::Output {

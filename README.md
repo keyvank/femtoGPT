@@ -6,7 +6,7 @@ Everything is implemented from scratch, including the tensor processing logic
 along with training/inference code of a minimal GPT architecture.
 
 The architecture is very similar/almost identical with Andrej Karpathy's
-![nanoGPT video lecture](https://github.com/karpathy/ng-video-lecture).
+[nanoGPT video lecture](https://github.com/karpathy/ng-video-lecture).
 
 femtoGPT is a great start for those who are fascinated by LLMs and would like to
 understand how these models work in very deep levels.

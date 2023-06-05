@@ -57,3 +57,15 @@ been able to generate words that are easy to pronounce.
 
 I'm currently training a 10M parameter model to further examine the correctness
 of my implementation.
+
+**UPDATE:**
+
+This has been a new output, after more hours of training on a model with similar scale:
+
+```
+What like but wore pad wo me che nogns yous dares,
+As supt it nind bupart 'the reed:
+And hils not es
+```
+
+Obviously the model has started to learn some words and punctuation rules!

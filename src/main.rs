@@ -16,6 +16,11 @@ fn main() {
 
     let batch_size = 10;
 
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(batch_size)
+        .build_global()
+        .unwrap();
+
     let num_tokens = 64;
     let vocab_size = tokenizer.vocab_size();
     let embedding_degree = 64;

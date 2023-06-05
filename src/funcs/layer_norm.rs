@@ -44,16 +44,16 @@ impl Function for LayerNorm {
             for i in 0..n {
                 let a = l.blob()[i];
                 let inp1_i = inp1_blob[i];
-                for j in 0..i + 1 {
-                    let val = if i == j {
-                        ((1. - n_inv) * sigma - (a - avg).powi(2) * sigma_inv * n_inv) * sigma2_inv
-                    } else {
-                        let b = l.blob()[j];
-                        (-n_inv * sigma - (b - avg) * (a - avg) * sigma_inv * n_inv) * sigma2_inv
-                    };
+                for j in 0..i {
+                    let b = l.blob()[j];
+                    let val =
+                        (-n_inv * sigma - (b - avg) * (a - avg) * sigma_inv * n_inv) * sigma2_inv;
                     data[i * n + j] = val * inp1_blob[j];
                     data[j * n + i] = val * inp1_i;
                 }
+                let val =
+                    ((1. - n_inv) * sigma - (a - avg).powi(2) * sigma_inv * n_inv) * sigma2_inv;
+                data[i * n + i] = val * inp1_blob[i];
             }
             Tensor::raw(&[n, n], data)
         });

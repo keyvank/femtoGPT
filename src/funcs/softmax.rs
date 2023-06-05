@@ -35,15 +35,12 @@ impl Function for Softmax {
             let mut data = vec![0.; n * n];
             for i in 0..n {
                 let si = l.blob()[i];
-                for j in 0..i + 1 {
-                    data[i * n + j] = if i == j {
-                        si * (1. - si)
-                    } else {
-                        let sj = l.blob()[j];
-                        -si * sj
-                    };
+                for j in 0..i {
+                    let sj = l.blob()[j];
+                    data[i * n + j] = -si * sj;
                     data[j * n + i] = data[i * n + j];
                 }
+                data[i * n + i] = si * (1. - si);
             }
             Tensor::raw(&[n, n], data)
         });

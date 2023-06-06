@@ -37,6 +37,8 @@ impl Function for LayerNorm {
             .iter()
             .zip(out_grad.keep_right(1).inners().iter())
             .map(|(l, o)| {
+                let l_blob = l.blob();
+                let o_blob = o.blob();
                 let inp1_blob = inps[1].blob();
                 let n = l.size();
                 let n_inv = 1. / n as f32;
@@ -48,10 +50,10 @@ impl Function for LayerNorm {
                 let sigma_inv = 1. / sigma;
                 let mut data = vec![0.; n];
                 for i in 0..n {
-                    let a = l.blob()[i];
+                    let a = l_blob[i];
                     let mut sum = 0.;
                     for j in 0..n {
-                        let b = l.blob()[j];
+                        let b = l_blob[j];
                         sum += (if i == j {
                             ((1. - n_inv) * sigma - (a - avg).powi(2) * sigma_inv * n_inv)
                                 * sigma2_inv
@@ -59,7 +61,7 @@ impl Function for LayerNorm {
                             (-n_inv * sigma - (b - avg) * (a - avg) * sigma_inv * n_inv)
                                 * sigma2_inv
                         }) * inp1_blob[j]
-                            * o.blob()[j];
+                            * o_blob[j];
                     }
                     data[i] = sum;
                 }

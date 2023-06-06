@@ -37,14 +37,16 @@ impl Function for Softmax {
             .iter()
             .zip(out_grad.keep_right(1).inners().iter())
             .map(|(l, o)| {
+                let l_blob = l.blob();
+                let o_blob = o.blob();
                 let n = l.shape()[0];
                 let mut data = vec![0.; n];
                 for i in 0..n {
-                    let si = l.blob()[i];
+                    let si = l_blob[i];
                     let mut sum = 0.;
                     for j in 0..n {
-                        let sj = l.blob()[j];
-                        sum += (if i == j { si * (1. - si) } else { -si * sj }) * o.blob()[j];
+                        let sj = l_blob[j];
+                        sum += (if i == j { si * (1. - si) } else { -si * sj }) * o_blob[j];
                     }
                     data[i] = sum;
                 }

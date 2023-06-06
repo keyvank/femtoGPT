@@ -30,23 +30,29 @@ impl Function for Softmax {
         self.out.clone()
     }
     fn grad(&self, _inps: &[&Tensor<f32>], out_grad: &Tensor<f32>) -> Vec<Tensor<f32>> {
-        let jacobian = self.out.map(1, |l| {
-            let n = l.shape()[0];
-            let mut data = vec![0.; n * n];
-            for i in 0..n {
-                let si = l.blob()[i];
-                for j in 0..i {
-                    let sj = l.blob()[j];
-                    data[i * n + j] = -si * sj;
-                    data[j * n + i] = data[i * n + j];
+        let grad_inp0 = self
+            .out
+            .keep_right(1)
+            .inners()
+            .iter()
+            .zip(out_grad.keep_right(1).inners().iter())
+            .map(|(l, o)| {
+                let n = l.shape()[0];
+                let mut data = vec![0.; n];
+                for i in 0..n {
+                    let si = l.blob()[i];
+                    let mut sum = 0.;
+                    for j in 0..n {
+                        let sj = l.blob()[j];
+                        sum += (if i == j { si * (1. - si) } else { -si * sj }) * o.blob()[j];
+                    }
+                    data[i] = sum;
                 }
-                data[i * n + i] = si * (1. - si);
-            }
-            Tensor::raw(&[n, n], data)
-        });
-
-        let out = &jacobian ^ &out_grad.unsqueeze(-1);
-        vec![out.squeeze(-1).into()]
+                data
+            })
+            .flatten()
+            .collect::<Vec<_>>();
+        vec![Tensor::raw(out_grad.shape(), grad_inp0)]
     }
     fn clone_box(&self) -> Box<dyn Function> {
         Box::new(self.clone())

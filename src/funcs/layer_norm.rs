@@ -31,35 +31,44 @@ impl Function for LayerNorm {
         &(&self.norm * inps[1]) + inps[2]
     }
     fn grad(&self, inps: &[&Tensor<f32>], out_grad: &Tensor<f32>) -> Vec<Tensor<f32>> {
-        let jacobian = inps[0].map(1, |l| {
-            let inp1_blob = inps[1].blob();
-            let n = l.size();
-            let n_inv = 1. / n as f32;
-            let avg = l.blob().iter().sum::<f32>() * n_inv;
-            let sigma2 = l.blob().iter().map(|f| (f - avg).powi(2)).sum::<f32>() * n_inv + EPSILON;
-            let sigma2_inv = 1. / sigma2;
-            let sigma = sigma2.sqrt();
-            let sigma_inv = 1. / sigma;
-            let mut data = vec![0.; n * n];
-            for i in 0..n {
-                let a = l.blob()[i];
-                let inp1_i = inp1_blob[i];
-                for j in 0..i {
-                    let b = l.blob()[j];
-                    let val =
-                        (-n_inv * sigma - (b - avg) * (a - avg) * sigma_inv * n_inv) * sigma2_inv;
-                    data[i * n + j] = val * inp1_blob[j];
-                    data[j * n + i] = val * inp1_i;
+        let grad_inp0 = inps[0]
+            .keep_right(1)
+            .inners()
+            .iter()
+            .zip(out_grad.keep_right(1).inners().iter())
+            .map(|(l, o)| {
+                let inp1_blob = inps[1].blob();
+                let n = l.size();
+                let n_inv = 1. / n as f32;
+                let avg = l.blob().iter().sum::<f32>() * n_inv;
+                let sigma2 =
+                    l.blob().iter().map(|f| (f - avg).powi(2)).sum::<f32>() * n_inv + EPSILON;
+                let sigma2_inv = 1. / sigma2;
+                let sigma = sigma2.sqrt();
+                let sigma_inv = 1. / sigma;
+                let mut data = vec![0.; n];
+                for i in 0..n {
+                    let a = l.blob()[i];
+                    let mut sum = 0.;
+                    for j in 0..n {
+                        let b = l.blob()[j];
+                        sum += (if i == j {
+                            ((1. - n_inv) * sigma - (a - avg).powi(2) * sigma_inv * n_inv)
+                                * sigma2_inv
+                        } else {
+                            (-n_inv * sigma - (b - avg) * (a - avg) * sigma_inv * n_inv)
+                                * sigma2_inv
+                        }) * inp1_blob[j]
+                            * o.blob()[j];
+                    }
+                    data[i] = sum;
                 }
-                let val =
-                    ((1. - n_inv) * sigma - (a - avg).powi(2) * sigma_inv * n_inv) * sigma2_inv;
-                data[i * n + i] = val * inp1_i;
-            }
-            Tensor::raw(&[n, n], data)
-        });
-        let inp0_out = &jacobian ^ &out_grad.unsqueeze(-1);
+                data
+            })
+            .flatten()
+            .collect::<Vec<_>>();
         vec![
-            inp0_out.squeeze(-1).into(),
+            Tensor::raw(out_grad.shape(), grad_inp0),
             out_grad * &self.norm,
             out_grad.clone(),
         ]

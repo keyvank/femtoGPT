@@ -303,27 +303,32 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
                     (graph, err)
                 })
                 .unzip();
-            for (id, avg) in self.params.iter().map(|id| {
-                let mut avg = Tensor::<f32>::scalar(0.);
-                graphs.iter().for_each(|g| avg = &avg + g.get_grad(*id));
-                avg = avg.map_values(|f| f / graphs.len() as f32);
-                (id, avg)
-            }) {
+            for (id, avg) in self
+                .params
+                .par_iter()
+                .map(|id| {
+                    let mut avg = Tensor::<f32>::scalar(0.);
+                    graphs.iter().for_each(|g| avg = &avg + g.get_grad(*id));
+                    avg = avg.map_values(|f| f / graphs.len() as f32);
+                    (id, avg)
+                })
+                .collect::<Vec<_>>()
+            {
                 self.graph.load_grad(*id, &avg);
             }
             let avg_loss = errs.iter().sum::<f32>() / errs.len() as f32;
-            println!(
-                "Step: {} Loss: {} (Elapsed: {}ms)",
-                i,
-                avg_loss,
-                timer.elapsed().as_millis()
-            );
             self.graph
                 .optimize(&mut self.optimizer, &self.params.iter().cloned().collect());
             if i % 50 == 0 {
                 println!("Saving the model...");
                 self.save();
             }
+            println!(
+                "Step: {} Loss: {} (Elapsed: {}ms)",
+                i,
+                avg_loss,
+                timer.elapsed().as_millis()
+            );
         }
     }
 

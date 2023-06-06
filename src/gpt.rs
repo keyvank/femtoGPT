@@ -275,6 +275,7 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
 
     pub fn train(&mut self, dataset: &[usize], num_batches: usize, batch_size: usize) {
         for i in 0..num_batches {
+            let mut graph = self.graph.clone();
             let timer = Instant::now();
             let poses = Tensor::raw(
                 &[batch_size, self.num_tokens],
@@ -284,33 +285,22 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
                     .collect(),
             );
             let (xs, ys) = sample_dataset(dataset, batch_size, self.num_tokens, &mut self.rng);
-            self.graph
-                .load(self.token_input, &embed(&xs, &self.token_embedding));
-            self.graph
-                .load(self.pos_input, &embed(&poses, &self.pos_embedding));
-            self.graph.forward(true);
-            self.graph.zero_grad();
-            let err = self
-                .graph
-                .backward_all(self.output, CrossEntropy::new(self.vocab_size, ys.clone()));
+            graph.load(self.token_input, &embed(&xs, &self.token_embedding));
+            graph.load(self.pos_input, &embed(&poses, &self.pos_embedding));
+            graph.forward(true);
+            graph.zero_grad();
+            let err =
+                graph.backward_all(self.output, CrossEntropy::new(self.vocab_size, ys.clone()));
             println!(
                 "Step: {} Loss: {} (Elapsed: {}ms)",
                 i,
                 err,
                 timer.elapsed().as_millis()
             );
-            self.graph
-                .optimize(&mut self.optimizer, &self.params.iter().cloned().collect());
-            unembed(
-                &xs,
-                self.graph.get(self.token_input),
-                &mut self.token_embedding,
-            );
-            unembed(
-                &poses,
-                self.graph.get(self.pos_input),
-                &mut self.pos_embedding,
-            );
+            graph.optimize(&mut self.optimizer, &self.params.iter().cloned().collect());
+            unembed(&xs, graph.get(self.token_input), &mut self.token_embedding);
+            unembed(&poses, graph.get(self.pos_input), &mut self.pos_embedding);
+            self.graph = graph;
             if i % 10 == 0 {
                 println!("Saving the model...");
                 self.save();

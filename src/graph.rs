@@ -29,6 +29,7 @@ pub struct Env {
 unsafe impl Send for Computation {}
 unsafe impl Sync for Computation {}
 
+#[derive(Clone)]
 pub struct Graph {
     tensors: BTreeMap<TensorId, Tensor<f32>>,
     grads: BTreeMap<TensorId, Tensor<f32>>,

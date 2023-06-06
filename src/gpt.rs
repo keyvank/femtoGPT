@@ -319,7 +319,7 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
             );
             self.graph
                 .optimize(&mut self.optimizer, &self.params.iter().cloned().collect());
-            if i % 10 == 0 {
+            if i % 50 == 0 {
                 println!("Saving the model...");
                 self.save();
             }

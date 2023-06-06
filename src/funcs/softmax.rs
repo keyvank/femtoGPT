@@ -18,12 +18,7 @@ impl Function for Softmax {
                 .blob()
                 .iter()
                 .fold(f32::NEG_INFINITY, |a, b| f32::max(a, *b));
-            let sum = l
-                .map_values(|f| (f - max).exp())
-                .inners()
-                .iter()
-                .map(|t| t.scalar())
-                .sum::<f32>();
+            let sum = l.blob().iter().map(|f| (f - max).exp()).sum::<f32>();
             l.map_values(|f| (f - max).exp() / sum)
         });
 

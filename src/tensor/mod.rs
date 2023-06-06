@@ -226,7 +226,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
 
     fn map_values<W: TensorElement, F: Fn(V) -> W + Sync + Send>(&self, f: F) -> Tensor<W> {
         Tensor {
-            blob: self.blob().par_iter().map(|v| f(*v)).collect::<Vec<_>>(),
+            blob: self.blob().iter().map(|v| f(*v)).collect::<Vec<_>>(),
             shape: self.shape().to_vec(),
         }
     }
@@ -239,7 +239,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         let blob = self
             .keep_right(dim)
             .inners()
-            .into_par_iter()
+            .into_iter()
             .map(|v| f(v))
             .collect::<Vec<_>>();
         assert!(blob.iter().all(|t| t.shape() == blob[0].shape()));

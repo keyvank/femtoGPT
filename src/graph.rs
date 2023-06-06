@@ -55,6 +55,9 @@ impl Graph {
     pub fn load<T: TensorOps<f32>>(&mut self, tensor_id: TensorId, tensor: &T) {
         self.tensors.insert(tensor_id, tensor.view().into());
     }
+    pub fn load_grad<T: TensorOps<f32>>(&mut self, tensor_id: TensorId, tensor: &T) {
+        self.grads.insert(tensor_id, tensor.view().into());
+    }
     pub fn zero_grad(&mut self) {
         self.grads.clear();
     }
@@ -72,6 +75,9 @@ impl Graph {
     }
     pub fn get(&self, id: TensorId) -> &Tensor<f32> {
         self.tensors.get(&id).expect("Tensor not found!")
+    }
+    pub fn get_grad(&self, id: TensorId) -> &Tensor<f32> {
+        self.grads.get(&id).expect("Tensor not found!")
     }
     pub fn backward_all(&mut self, id: TensorId, loss_fn: Box<dyn Loss>) -> f32 {
         let output = self.get(id);

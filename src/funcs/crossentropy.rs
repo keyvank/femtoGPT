@@ -20,8 +20,8 @@ impl Loss for CrossEntropy {
         let (loss, grad): (Vec<f32>, Vec<Vec<f32>>) = inp
             .keep_right(1)
             .inners()
-            .par_iter()
-            .zip(self.target.blob().par_iter())
+            .iter()
+            .zip(self.target.blob().iter())
             .map(|(o, t)| {
                 let o_exps = o.blob().iter().map(|f| f.exp()).collect::<Vec<_>>();
                 let sum = o_exps.iter().sum::<f32>();

@@ -67,8 +67,8 @@ impl<
             let data = a
                 .keep_right(2)
                 .inners()
-                .par_iter()
-                .zip(b.keep_right(2).inners().par_iter())
+                .iter()
+                .zip(b.keep_right(2).inners().iter())
                 .map(|(a, b)| {
                     let m = a.shape()[0];
                     let n = a.shape()[1];

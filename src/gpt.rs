@@ -3,6 +3,7 @@ use crate::graph::{Graph, TensorId};
 use crate::optimizer::Optimizer;
 use crate::tensor::{Tensor, TensorMutOps, TensorOps};
 use rand::Rng;
+use rayon::prelude::*;
 use std::time::Instant;
 
 use std::fs;
@@ -15,8 +16,8 @@ pub struct GPT<O: Optimizer, R: Rng> {
     vocab_size: usize,
     num_tokens: usize,
     params: Vec<TensorId>,
-    token_embedding: Tensor<f32>,
-    pos_embedding: Tensor<f32>,
+    token_embedding: TensorId,
+    pos_embedding: TensorId,
     token_input: TensorId,
     pos_input: TensorId,
     output: TensorId,
@@ -100,8 +101,8 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
     ) -> Self {
         let mut g = Graph::new();
 
-        let token_embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
-        let pos_embedding = Tensor::<f32>::rand(&mut rng, &[num_tokens, embedding_degree]);
+        let token_embedding = g.alloc_rand(&mut rng, &[vocab_size, embedding_degree]);
+        let pos_embedding = g.alloc_rand(&mut rng, &[num_tokens, embedding_degree]);
 
         let token_input = g.alloc_rand(&mut rng, &[1, num_tokens, embedding_degree]);
         let pos_input = g.alloc_rand(&mut rng, &[1, num_tokens, embedding_degree]);
@@ -110,7 +111,7 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
         // Keep track of tensor-ids of learnable tensors!
         let mut params: Vec<TensorId> = Vec::new();
 
-        params.extend(&[token_input, pos_input]);
+        params.extend(&[token_embedding, pos_embedding]);
 
         let mut curr_inp = inp;
         for _ in 0..num_layers {
@@ -230,24 +231,12 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
     pub fn load(&mut self) {
         if std::path::Path::new("train_data").is_dir() {
             for p in self.params.iter() {
-                if *p != self.token_input && *p != self.pos_input {
-                    let mut tensor_file =
-                        File::open(format!("train_data/tensor_{}.dat", p)).unwrap();
-                    let mut bytes = Vec::new();
-                    tensor_file.read_to_end(&mut bytes).unwrap();
-                    let t: Tensor<f32> = bincode::deserialize(&bytes).unwrap();
-                    self.graph.load(*p, &t);
-                }
+                let mut tensor_file = File::open(format!("train_data/tensor_{}.dat", p)).unwrap();
+                let mut bytes = Vec::new();
+                tensor_file.read_to_end(&mut bytes).unwrap();
+                let t: Tensor<f32> = bincode::deserialize(&bytes).unwrap();
+                self.graph.load(*p, &t);
             }
-            let mut embed_data = File::open("train_data/embedding.dat").unwrap();
-            let mut bytes = Vec::new();
-            embed_data.read_to_end(&mut bytes).unwrap();
-            self.token_embedding = bincode::deserialize(&bytes).unwrap();
-
-            let mut pos_embed_data = File::open("train_data/pos_embedding.dat").unwrap();
-            let mut bytes = Vec::new();
-            pos_embed_data.read_to_end(&mut bytes).unwrap();
-            self.pos_embedding = bincode::deserialize(&bytes).unwrap();
 
             let mut opt_data = File::open("train_data/optimizer.dat").unwrap();
             let mut bytes = Vec::new();
@@ -259,48 +248,77 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
     pub fn save(&self) {
         fs::create_dir_all("train_data").unwrap();
         for p in self.params.iter() {
-            if *p != self.token_input && *p != self.pos_input {
-                let data = bincode::serialize(self.graph.get(*p)).unwrap();
-                fs::write(format!("train_data/tensor_{}.dat", p), &data)
-                    .expect("Unable to write file");
-            }
+            let data = bincode::serialize(self.graph.get(*p)).unwrap();
+            fs::write(format!("train_data/tensor_{}.dat", p), &data).expect("Unable to write file");
         }
-        let embed_data = bincode::serialize(&self.token_embedding).unwrap();
-        fs::write("train_data/embedding.dat", &embed_data).expect("Unable to write file");
-        let pos_embed_data = bincode::serialize(&self.pos_embedding).unwrap();
-        fs::write("train_data/pos_embedding.dat", &pos_embed_data).expect("Unable to write file");
         let opt_data = bincode::serialize(&self.optimizer).unwrap();
         fs::write("train_data/optimizer.dat", &opt_data).expect("Unable to write file");
     }
 
     pub fn train(&mut self, dataset: &[usize], num_batches: usize, batch_size: usize) {
         for i in 0..num_batches {
-            let mut graph = self.graph.clone();
             let timer = Instant::now();
-            let poses = Tensor::raw(
-                &[batch_size, self.num_tokens],
-                (0..self.num_tokens)
-                    .cycle()
-                    .take(self.num_tokens * batch_size)
-                    .collect(),
-            );
-            let (xs, ys) = sample_dataset(dataset, batch_size, self.num_tokens, &mut self.rng);
-            graph.load(self.token_input, &embed(&xs, &self.token_embedding));
-            graph.load(self.pos_input, &embed(&poses, &self.pos_embedding));
-            graph.forward(true);
-            graph.zero_grad();
-            let err =
-                graph.backward_all(self.output, CrossEntropy::new(self.vocab_size, ys.clone()));
+            let (graphs, errs): (Vec<Graph>, Vec<f32>) = (0..batch_size)
+                .into_par_iter()
+                .map(|_| {
+                    let mut rng = rand::thread_rng();
+                    let mut graph = self.graph.clone();
+                    let poses = Tensor::raw(
+                        &[1, self.num_tokens],
+                        (0..self.num_tokens)
+                            .cycle()
+                            .take(self.num_tokens * 1)
+                            .collect(),
+                    );
+                    let (xs, ys) = sample_dataset(dataset, 1, self.num_tokens, &mut rng);
+                    graph.load(
+                        self.token_input,
+                        &embed(&xs, graph.get(self.token_embedding)),
+                    );
+                    graph.load(
+                        self.pos_input,
+                        &embed(&poses, graph.get(self.pos_embedding)),
+                    );
+                    graph.forward(true);
+                    graph.zero_grad();
+                    let err = graph
+                        .backward_all(self.output, CrossEntropy::new(self.vocab_size, ys.clone()));
+                    let mut token_embedding_grad =
+                        Tensor::<f32>::zeros(graph.get(self.token_embedding).shape());
+                    let mut pos_embedding_grad =
+                        Tensor::<f32>::zeros(graph.get(self.pos_embedding).shape());
+                    unembed(
+                        &xs,
+                        graph.get_grad(self.token_input),
+                        &mut token_embedding_grad,
+                    );
+                    unembed(
+                        &poses,
+                        graph.get_grad(self.pos_input),
+                        &mut pos_embedding_grad,
+                    );
+                    graph.load_grad(self.token_embedding, &token_embedding_grad);
+                    graph.load_grad(self.pos_embedding, &pos_embedding_grad);
+                    (graph, err)
+                })
+                .unzip();
+            for (id, avg) in self.params.iter().map(|id| {
+                let mut avg = Tensor::<f32>::scalar(0.);
+                graphs.iter().for_each(|g| avg = &avg + g.get_grad(*id));
+                avg = avg.map_values(|f| f / graphs.len() as f32);
+                (id, avg)
+            }) {
+                self.graph.load_grad(*id, &avg);
+            }
+            let avg_loss = errs.iter().sum::<f32>() / errs.len() as f32;
             println!(
                 "Step: {} Loss: {} (Elapsed: {}ms)",
                 i,
-                err,
+                avg_loss,
                 timer.elapsed().as_millis()
             );
-            graph.optimize(&mut self.optimizer, &self.params.iter().cloned().collect());
-            unembed(&xs, graph.get(self.token_input), &mut self.token_embedding);
-            unembed(&poses, graph.get(self.pos_input), &mut self.pos_embedding);
-            self.graph = graph;
+            self.graph
+                .optimize(&mut self.optimizer, &self.params.iter().cloned().collect());
             if i % 10 == 0 {
                 println!("Saving the model...");
                 self.save();
@@ -313,14 +331,16 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
         let mut context = vec![0; self.num_tokens];
         context[..prompt.len()].copy_from_slice(prompt);
         let poses = Tensor::raw(&[1, self.num_tokens], (0..self.num_tokens).collect());
-        self.graph
-            .load(self.pos_input, &embed(&poses, &self.pos_embedding));
+        self.graph.load(
+            self.pos_input,
+            &embed(&poses, &self.graph.get(self.pos_embedding)),
+        );
         for _ in 0..count {
             self.graph.load(
                 self.token_input,
                 &embed(
                     &Tensor::raw(&[1, self.num_tokens], context.clone()),
-                    &self.token_embedding,
+                    self.graph.get(self.token_embedding),
                 ),
             );
             self.graph.forward(false);

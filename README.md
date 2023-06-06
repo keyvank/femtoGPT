@@ -25,7 +25,7 @@ bug-free?)
 **HELP!** *IF YOU HAVE A COMPUTER WITH PLENTY OF CPUS AND YOU DON'T MIND RUNNING femtoGPT
 FOR A FEW HOURS/DAYS, YOU CAN HELP THIS PROJECT A GREAT DEAL! PLZ CONTACT ME :)*
 
-([discord.gg/wTJFaDVn45](Discord server) for discussions around the project!)
+([Discord server](https://discord.gg/wTJFaDVn45) for discussions around the project!)
 
 ## Usage
 

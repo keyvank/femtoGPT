@@ -97,6 +97,7 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
         num_layers: usize,
         num_heads: usize,
         head_size: usize,
+        dropout: f32,
         optimizer: O,
     ) -> Self {
         let mut g = Graph::new();
@@ -143,7 +144,7 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
                     &[kq_coeff],
                 );
                 let soft_masked_kq = g.call(Softmax::new(), &[masked_kq]);
-                let dropped_soft_masked_kq = g.call(Dropout::new(0.05), &[soft_masked_kq]);
+                let dropped_soft_masked_kq = g.call(Dropout::new(dropout), &[soft_masked_kq]);
                 let atten = g.call(MatMul::new(), &[dropped_soft_masked_kq, v]);
                 heads.push(atten);
             }
@@ -154,7 +155,7 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
             let proj_bias_params = g.alloc_rand(&mut rng, &[embedding_degree]);
             let proj_cat = g.call(MatMul::new(), &[cat, proj_params]);
             let proj_cat_bias = g.call(Add::new(), &[proj_cat, proj_bias_params]);
-            let dropped_proj_cat_bias = g.call(Dropout::new(0.05), &[proj_cat_bias]);
+            let dropped_proj_cat_bias = g.call(Dropout::new(dropout), &[proj_cat_bias]);
 
             // Add attention results to input and then normalize
             let add_atten = g.call(Add::new(), &[norm_inp, dropped_proj_cat_bias]);

@@ -1,6 +1,6 @@
 use super::{Function, Tensor, TensorOps};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Mask {
     mask: Tensor<f32>,
     value: f32,
@@ -28,5 +28,8 @@ impl Function for Mask {
     }
     fn grad(&self, _inps: &[&Tensor<f32>], out_grad: &Tensor<f32>) -> Vec<Tensor<f32>> {
         vec![out_grad * &self.mask]
+    }
+    fn clone_box(&self) -> Box<dyn Function> {
+        Box::new(self.clone())
     }
 }

@@ -25,6 +25,7 @@ pub use transpose::*;
 use super::tensor::*;
 
 pub trait Function: std::fmt::Debug {
+    fn clone_box(&self) -> Box<dyn Function>;
     fn run(&mut self, inps: &[&Tensor<f32>], training: bool) -> Tensor<f32>;
     fn grad(&self, inps: &[&Tensor<f32>], out_grad: &Tensor<f32>) -> Vec<Tensor<f32>>;
 }

@@ -12,6 +12,25 @@ struct Computation {
     func: Box<dyn Function>,
 }
 
+impl Clone for Computation {
+    fn clone(&self) -> Self {
+        Self {
+            inps: self.inps.clone(),
+            out: self.out,
+            func: self.func.clone_box(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Env {
+    tensors: BTreeMap<TensorId, Tensor<f32>>,
+    grads: BTreeMap<TensorId, Tensor<f32>>,
+}
+
+unsafe impl Send for Computation {}
+unsafe impl Sync for Computation {}
+
 pub struct Graph {
     tensors: BTreeMap<TensorId, Tensor<f32>>,
     grads: BTreeMap<TensorId, Tensor<f32>>,

@@ -1,6 +1,6 @@
 use super::{Function, Tensor, TensorOps};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MatMul;
 impl MatMul {
     pub fn new() -> Box<dyn Function> {
@@ -16,5 +16,8 @@ impl Function for MatMul {
             out_grad ^ &inps[1].transpose(),
             &inps[0].transpose() ^ out_grad,
         ]
+    }
+    fn clone_box(&self) -> Box<dyn Function> {
+        Box::new(self.clone())
     }
 }

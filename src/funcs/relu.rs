@@ -1,6 +1,6 @@
 use super::{Function, Tensor, TensorOps};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Relu;
 impl Relu {
     pub fn new() -> Box<dyn Function> {
@@ -14,5 +14,8 @@ impl Function for Relu {
     fn grad(&self, inps: &[&Tensor<f32>], out_grad: &Tensor<f32>) -> Vec<Tensor<f32>> {
         let der = inps[0].map_values(|f| if f > 0. { 1. } else { 0.01 });
         vec![&der * out_grad]
+    }
+    fn clone_box(&self) -> Box<dyn Function> {
+        Box::new(self.clone())
     }
 }

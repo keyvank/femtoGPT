@@ -1,6 +1,6 @@
 use super::{Function, Tensor, TensorOps};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Coeff {
     coeff: f32,
 }
@@ -15,5 +15,8 @@ impl Function for Coeff {
     }
     fn grad(&self, _inps: &[&Tensor<f32>], out_grad: &Tensor<f32>) -> Vec<Tensor<f32>> {
         vec![out_grad.map_values(|d| d * self.coeff)]
+    }
+    fn clone_box(&self) -> Box<dyn Function> {
+        Box::new(self.clone())
     }
 }

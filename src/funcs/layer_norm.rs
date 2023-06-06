@@ -1,6 +1,6 @@
 use super::{Function, Tensor, TensorOps};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LayerNorm {
     norm: Tensor<f32>,
 }
@@ -63,5 +63,8 @@ impl Function for LayerNorm {
             out_grad * &self.norm,
             out_grad.clone(),
         ]
+    }
+    fn clone_box(&self) -> Box<dyn Function> {
+        Box::new(self.clone())
     }
 }

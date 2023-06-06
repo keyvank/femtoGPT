@@ -1,6 +1,6 @@
 use super::{Function, Tensor, TensorOps};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Softmax {
     out: Tensor<f32>,
 }
@@ -47,5 +47,8 @@ impl Function for Softmax {
 
         let out = &jacobian ^ &out_grad.unsqueeze(-1);
         vec![out.squeeze(-1).into()]
+    }
+    fn clone_box(&self) -> Box<dyn Function> {
+        Box::new(self.clone())
     }
 }

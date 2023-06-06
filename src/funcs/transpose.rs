@@ -1,6 +1,6 @@
 use super::{Function, Tensor, TensorOps};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Transpose {}
 impl Transpose {
     pub fn new() -> Box<dyn Function> {
@@ -14,5 +14,8 @@ impl Function for Transpose {
     }
     fn grad(&self, _inps: &[&Tensor<f32>], out_grad: &Tensor<f32>) -> Vec<Tensor<f32>> {
         vec![out_grad.transpose()]
+    }
+    fn clone_box(&self) -> Box<dyn Function> {
+        Box::new(self.clone())
     }
 }

@@ -1,6 +1,6 @@
 use super::{Function, Tensor};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Cat {}
 impl Cat {
     pub fn new() -> Box<dyn Function> {
@@ -14,5 +14,8 @@ impl Function for Cat {
     }
     fn grad(&self, inps: &[&Tensor<f32>], out_grad: &Tensor<f32>) -> Vec<Tensor<f32>> {
         Tensor::split(out_grad, inps.len())
+    }
+    fn clone_box(&self) -> Box<dyn Function> {
+        Box::new(self.clone())
     }
 }

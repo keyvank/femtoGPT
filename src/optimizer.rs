@@ -4,7 +4,7 @@ use crate::tensor::{Tensor, TensorOps};
 use rayon::prelude::*;
 use std::collections::HashMap;
 pub trait Optimizer: Serialize + serde::de::DeserializeOwned {
-    fn step(&mut self, params: Vec<&mut Tensor<f32>>, grads: Vec<&Tensor<f32>>);
+    fn step(&mut self, lr_decay_iter: usize, params: Vec<&mut Tensor<f32>>, grads: Vec<&Tensor<f32>>);
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -21,7 +21,7 @@ impl Naive {
 // Simplest optimizer possible, just reduce gradients
 // from params with a learning_rate coefficient
 impl Optimizer for Naive {
-    fn step(&mut self, params: Vec<&mut Tensor<f32>>, grads: Vec<&Tensor<f32>>) {
+    fn step(&mut self, lr_decay_iter: usize, params: Vec<&mut Tensor<f32>>, grads: Vec<&Tensor<f32>>) {
         for (param, grad) in params.into_iter().zip(grads.into_iter()) {
             *param = &*param + &(grad * &Tensor::scalar(-self.learning_rate));
         }
@@ -32,7 +32,9 @@ const EPSILON: f32 = 1e-8;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AdamW {
+    orig_lr: f32,
     learning_rate: f32,
+    min_lr_rate: f32,
     beta1: f32,
     beta2: f32,
     weight_decay: f32,
@@ -44,7 +46,9 @@ pub struct AdamW {
 impl AdamW {
     pub fn new(learning_rate: f32) -> Self {
         Self {
+            orig_lr: learning_rate,
             learning_rate,
+            min_lr_rate: 0.00001,
             beta1: 0.9,
             beta2: 0.999,
             weight_decay: 0.01,
@@ -58,7 +62,18 @@ impl AdamW {
 // Adam optimizer with weight decay!
 // https://pytorch.org/docs/stable/generated/torch.optim.AdamW.html
 impl Optimizer for AdamW {
-    fn step(&mut self, params: Vec<&mut Tensor<f32>>, grads: Vec<&Tensor<f32>>) {
+    fn step(&mut self, lr_decay_iter: usize, params: Vec<&mut Tensor<f32>>, grads: Vec<&Tensor<f32>>)
+    {
+        if lr_decay_iter > 0
+        {
+            self.learning_rate = self.learning_rate - ((self.orig_lr - self.min_lr_rate)
+                * (1.0 / lr_decay_iter as f32));
+            if self.learning_rate < self.min_lr_rate
+            {
+                self.learning_rate = self.min_lr_rate;
+            }
+        }
+
         if self.m.len() == 0 || self.v.len() == 0 {
             self.m = vec![Tensor::scalar(0.); params.len()];
             self.v = vec![Tensor::scalar(0.); params.len()];

@@ -14,6 +14,7 @@ pub struct GPT<O: Optimizer, R: Rng> {
     rng: R,
     graph: Graph,
     vocab_size: usize,
+    lr_decay_iter: usize,
     num_tokens: usize,
     params: Vec<TensorId>,
     token_embedding: TensorId,
@@ -91,6 +92,7 @@ fn select<T: TensorOps<f32>>(t: &T) -> usize {
 impl<O: Optimizer, R: Rng> GPT<O, R> {
     pub fn new(
         mut rng: R,
+        lr_decay_iter: usize,
         vocab_size: usize,
         embedding_degree: usize,
         num_tokens: usize,
@@ -210,6 +212,7 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
         Self {
             rng,
             graph: g,
+            lr_decay_iter,
             vocab_size,
             num_tokens,
             params,
@@ -318,7 +321,7 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
             }
             let avg_loss = errs.iter().sum::<f32>() / errs.len() as f32;
             self.graph
-                .optimize(&mut self.optimizer, &self.params.iter().cloned().collect());
+                .optimize(&mut self.optimizer, self.lr_decay_iter, &self.params.iter().cloned().collect());
             if i % 50 == 0 {
                 println!("Saving the model...");
                 self.save();

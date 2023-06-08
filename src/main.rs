@@ -3,8 +3,18 @@ use femto_gpt::tokenizer::{SimpleTokenizer, Tokenizer};
 
 use std::fs;
 use std::io::Write;
+use clap::{Parser, Subcommand};
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    // learning rate decay iterations
+    #[arg(short, long, default_value_t = 0)]
+    lr_decay_iter: usize
+}
 
 fn main() {
+    let args = Cli::parse();
     let mut rng = rand::thread_rng();
 
     // Create a unique char-to-int mapping for all unique characters inside our dataset
@@ -30,6 +40,7 @@ fn main() {
 
     let mut gpt = GPT::new(
         &mut rng,
+        args.lr_decay_iter,
         vocab_size,
         embedding_degree,
         num_tokens,
@@ -37,7 +48,7 @@ fn main() {
         num_heads,
         head_size,
         dropout,
-        femto_gpt::optimizer::AdamW::new(0.00003),
+        femto_gpt::optimizer::AdamW::new(0.001),
     );
 
     println!("Number of parameters: {}", gpt.num_params());

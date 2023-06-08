@@ -133,7 +133,7 @@ impl Graph {
         );
         child
     }
-    pub fn optimize<O: Optimizer>(&mut self, opt: &mut O, params: &HashSet<TensorId>) {
+    pub fn optimize<O: Optimizer>(&mut self, opt: &mut O, lr_decay_iter: usize, params: &HashSet<TensorId>) {
         let (params, grads): (Vec<&mut Tensor<f32>>, Vec<&Tensor<f32>>) = self
             .tensors
             .iter_mut()
@@ -145,6 +145,6 @@ impl Graph {
             .collect::<Vec<_>>()
             .into_iter()
             .unzip();
-        opt.step(params, grads);
+        opt.step(lr_decay_iter, params, grads);
     }
 }

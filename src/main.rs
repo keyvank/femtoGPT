@@ -49,10 +49,10 @@ fn main() {
 
     // Generate 100 character with the currently trained model before
     // starting the training loop.
-    gpt.infer(&tokenizer.tokenize("\n"), 100, |ch| {
-        print!("{}", tokenizer.untokenize(&[ch]));
-        std::io::stdout().flush().unwrap();
-    });
+    println!(
+        "{}",
+        tokenizer.untokenize(&gpt.infer(&tokenizer.tokenize("\n"), 100, |ch| {}))
+    );
 
     println!();
     println!("Starting the training loop... (This make take hours to converge! be patient!)");

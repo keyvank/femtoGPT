@@ -332,7 +332,12 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
         }
     }
 
-    pub fn infer<F: Fn(usize) -> ()>(&mut self, prompt: &[usize], count: usize, callback: F) {
+    pub fn infer<F: Fn(usize) -> ()>(
+        &mut self,
+        prompt: &[usize],
+        count: usize,
+        callback: F,
+    ) -> Vec<usize> {
         let mut cnt = prompt.len();
         let mut context = vec![0; self.num_tokens];
         context[..prompt.len()].copy_from_slice(prompt);
@@ -341,6 +346,7 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
             self.pos_input,
             &embed(&poses, &self.graph.get(self.pos_embedding)),
         );
+        let mut chs = vec![];
         for _ in 0..count {
             self.graph.load(
                 self.token_input,
@@ -351,6 +357,7 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
             );
             self.graph.forward(false);
             let next_ch = select(&self.graph.get(self.output).get(0).get(cnt - 1));
+            chs.push(next_ch);
             callback(next_ch);
             if cnt == self.num_tokens {
                 context.remove(0);
@@ -360,5 +367,6 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
             context[cnt] = next_ch;
             cnt += 1;
         }
+        chs
     }
 }

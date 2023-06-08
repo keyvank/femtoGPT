@@ -19,9 +19,10 @@ fn main() {
     let num_tokens = 64;
     let vocab_size = tokenizer.vocab_size();
     let embedding_degree = 64;
-    let num_layers = 6;
+    let num_layers = 4;
     let num_heads = 4;
     let head_size = embedding_degree / num_heads;
+    let hiddens = 2;
     let dropout = 0.0;
 
     assert_eq!(num_heads * head_size, embedding_degree);
@@ -36,6 +37,7 @@ fn main() {
         num_layers,
         num_heads,
         head_size,
+        hiddens,
         dropout,
         femto_gpt::optimizer::AdamW::new(0.00003),
     );

@@ -1,1 +1,3 @@
 /target
+/train_data
+Cargo.lock

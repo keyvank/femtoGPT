@@ -346,7 +346,10 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
             self.pos_input,
             &embed(&poses, &self.graph.get(self.pos_embedding)),
         );
-        let mut chs = vec![];
+        for ch in prompt {
+            callback(*ch);
+        }
+        let mut chs = prompt.to_vec();
         for _ in 0..count {
             self.graph.load(
                 self.token_input,

@@ -60,7 +60,7 @@ been able to generate words that are easy to pronounce.
 I'm currently training a 10M parameter model to further examine the correctness
 of my implementation.
 
-**UPDATE:**
+**UPDATE 5th June 2023:**
 
 This has been a new output, after more hours of training on a model with similar scale:
 
@@ -71,3 +71,27 @@ And hils not es
 ```
 
 Obviously the model has started to learn some words and punctuation rules!
+
+**UPDATE 9th June 2023:**
+
+Model was able to reach loss value of ~1.4
+
+Here is an example output:
+
+```
+Adistition gone; true; schistoes for mine souls!
+Before your home, bariechts should be
+Carlam on that's a worf quirer of him so.
+What look'd lack away more
+To him foot; one hour fortious of saves:
+Son;
+'Tis all Earl mmistling me.
+
+HARSARTIO:
+Why, idless of my mocks fan that were percious.
+Having I will thou should and the muour ne'er shor
+To purple, when duke thy are out him.
+But will bid you doth remember nature.
+Even OF hencomey, carniffeit, I joy
+Warming; my deed, but it on of mortard,
+```

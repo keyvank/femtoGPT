@@ -334,7 +334,6 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
             }
             let avg_loss = errs.iter().sum::<f32>() / errs.len() as f32;
             let lr = learning_rate(self.optimizer.step_num());
-            println!("{}", lr);
             self.graph.optimize(
                 &mut self.optimizer,
                 &self.params.iter().cloned().collect(),

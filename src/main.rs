@@ -69,6 +69,7 @@ fn main() {
         if step < warmup_steps {
             (base_lr / warmup_steps as f32) * step as f32
         } else {
+            // Fancy LR tuning, thanks to https://github.com/cutoken!
             f32::max(
                 min_lr,
                 base_lr - (base_lr - min_lr) * (step - warmup_steps) as f32 / decay_steps as f32,

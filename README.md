@@ -15,7 +15,7 @@ femtoGPT uses nothing but random generation libraries (`rand`/`rand-distr`), dat
 libraries (`serde`/`bincode` for saving/loading already trained models) and a
 parallel computing library (`rayon`).
 
-femtoGPT is ***EXTREMELY SLOW***, since most of the primitive operations (E.g Matrix multiplication)
+femtoGPT is ~~EXTREMELY SLOW~~ ***relatively fast on CPU 😉***, since most of the primitive operations (E.g Matrix multiplication)
 are implemented in the simplest way possible.
 
 Correctness of gradients is checked using gradient-check method, though it still is very

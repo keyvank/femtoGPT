@@ -2,7 +2,6 @@ use femto_gpt::gpt::GPT;
 use femto_gpt::tokenizer::{SimpleTokenizer, Tokenizer};
 
 use std::fs;
-use std::io::Write;
 
 fn main() {
     let mut rng = rand::thread_rng();
@@ -39,7 +38,7 @@ fn main() {
         head_size,
         hiddens,
         dropout,
-        femto_gpt::optimizer::AdamW::new(0.00003),
+        femto_gpt::optimizer::AdamW::new(),
     );
 
     println!("Number of parameters: {}", gpt.num_params());
@@ -53,13 +52,27 @@ fn main() {
     // starting the training loop.
     println!(
         "{}",
-        tokenizer.untokenize(&gpt.infer(&tokenizer.tokenize("\n"), 100, |ch| {}))
+        tokenizer.untokenize(&gpt.infer(&tokenizer.tokenize("\n"), 100, |_ch| {}))
     );
 
     println!();
     println!("Starting the training loop... (This make take hours to converge! be patient!)");
     println!();
 
+    let base_lr = 0.001;
+    let min_lr = 0.00001;
+    let warmup_steps = 100;
+    let decay_steps = 50000;
+
     // Training loop!
-    gpt.train(&dataset, 100000, batch_size);
+    gpt.train(&dataset, 100000, batch_size, |step| {
+        if step < warmup_steps {
+            (base_lr / warmup_steps as f32) * step as f32
+        } else {
+            f32::max(
+                min_lr,
+                base_lr - (base_lr - min_lr) * (step - warmup_steps) as f32 / decay_steps as f32,
+            )
+        }
+    });
 }

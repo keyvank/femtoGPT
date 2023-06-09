@@ -266,7 +266,13 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
         fs::write("train_data/optimizer.dat", &opt_data).expect("Unable to write file");
     }
 
-    pub fn train(&mut self, dataset: &[usize], num_batches: usize, batch_size: usize) {
+    pub fn train<F: Fn(usize) -> f32>(
+        &mut self,
+        dataset: &[usize],
+        num_batches: usize,
+        batch_size: usize,
+        learning_rate: F,
+    ) {
         for i in 0..num_batches {
             let timer = Instant::now();
             let (graphs, errs): (Vec<Graph>, Vec<f32>) = (0..batch_size)
@@ -327,8 +333,13 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
                 self.graph.load_grad(*id, &avg);
             }
             let avg_loss = errs.iter().sum::<f32>() / errs.len() as f32;
-            self.graph
-                .optimize(&mut self.optimizer, &self.params.iter().cloned().collect());
+            let lr = learning_rate(self.optimizer.step_num());
+            println!("{}", lr);
+            self.graph.optimize(
+                &mut self.optimizer,
+                &self.params.iter().cloned().collect(),
+                lr,
+            );
             if i % 50 == 0 {
                 println!("Saving the model...");
                 self.save();

@@ -95,3 +95,52 @@ But will bid you doth remember nature.
 Even OF hencomey, carniffeit, I joy
 Warming; my deed, but it on of mortard,
 ```
+
+**UPDATE 10th June 2023, sparks of AGI? LOL**
+
+Having trained a 5-layer model on a dataset gathered from Reddit, tokenized with sentencepiece tokenizer with a vocab-size of 500, for about ~10 hours on a 32-core CPU:
+
+Prompt **"I think"**:
+
+```
+I think it s not a scientific method of atheism
+I think it s not a fairly simple possible to have a
+I think that s a possible point, but I m not sure if you re not
+I think that s a great idea, but I m not sure how these are you talking
+I think it s a simple thing to do, but I m not sure how thes
+I think that s a good thing, but I don t think that s what I mean, I think I
+I think that s the only way to be able to use it to be in the same way, but
+I think that the police are relatively relatively relative
+I think that s a simple moron is a simple character
+I think that s the only way to go to the second side of the pol
+```
+
+Prompt **"Life is"**:
+
+```
+Life is not a good idea, but it s not a perfection of the opp
+Life is a good thing to say that I don t know what you re talking about, but I don
+Life is not the same as a religion, but I m not sure if you re a
+Life is a perfectly good job of arguing that you are alm
+Life is a perfectly good job of the opposite of the f
+Life is a fundamentalist, and then I m not sure how the h
+Life is not a good idea, and it s not a perfectly good job, but I
+Life is not the same as atheists, but that s the only way to be ac
+Life is a bit of a single one of these industry is a f
+Life is a good idea to get the opposite of the police offic
+```
+
+Prompt **"So sad that"**:
+
+```
+So sad that you can tell you what? I think I ve been using it on the scre
+So sad that I don t know about it, but I don t think I m not afraid to
+So sad that I m not sure if you re not arguing with the fact that you
+So sad that I was involved in the future, and I have a few we
+So sad that s what I said, I m sure you are almost everything you
+So sad that you can do it, and I don t think that the fact that it s a po
+So sad that I m not sure if you re arguing with the fact that they are
+So sad that s the one too much time, but I m not sure if you re arg
+So sad that you are sadly supposed to be a big deal in the world
+So sad that I don t know about this, but I m not sure how you can do it, but
+```

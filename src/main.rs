@@ -48,11 +48,13 @@ fn main() {
 
     println!("Generating text:");
 
+    let inference_temperature = 0.5; // How creative? 0.0 min 1.0 max
+
     // Generate 100 character with the currently trained model before
     // starting the training loop.
     println!(
         "{}",
-        tokenizer.untokenize(&gpt.infer(&tokenizer.tokenize("\n"), 100, |_ch| {}))
+        tokenizer.untokenize(&gpt.infer(&tokenizer.tokenize("\n"), 100, 0.5, |_ch| {}))
     );
 
     println!();

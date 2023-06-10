@@ -72,12 +72,12 @@ fn unembed(s: &Tensor<usize>, s_result: &Tensor<f32>, embedding: &mut Tensor<f32
     }
 }
 
-fn select<T: TensorOps<f32>>(t: &T) -> usize {
+fn select<T: TensorOps<f32>>(t: &T, temperature: f32) -> usize {
     let t = Softmax::new().run(&[&Tensor::<f32>::raw(t.shape(), t.blob().to_vec())], false);
     let mut rng = rand::thread_rng();
     let mut ts = t.blob().iter().cloned().enumerate().collect::<Vec<_>>();
     ts.sort_by_key(|(_, b)| (b * 1000.) as usize);
-    let dice = rng.gen_range(0f32..1f32);
+    let dice = rng.gen_range(0.0..temperature);
     let mut accum = 0.;
     for (id, t) in ts.iter().rev() {
         accum += t;
@@ -356,6 +356,7 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
         &mut self,
         prompt: &[usize],
         count: usize,
+        temperature: f32,
         callback: F,
     ) -> Vec<usize> {
         let mut cnt = prompt.len();
@@ -379,7 +380,10 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
                 ),
             );
             self.graph.forward(false);
-            let next_ch = select(&self.graph.get(self.output).get(0).get(cnt - 1));
+            let next_ch = select(
+                &self.graph.get(self.output).get(0).get(cnt - 1),
+                temperature,
+            );
             chs.push(next_ch);
             callback(next_ch);
             if cnt == self.num_tokens {

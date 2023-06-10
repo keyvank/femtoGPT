@@ -345,7 +345,7 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
             }
             println!(
                 "Step: {} Loss: {} (Elapsed: {}ms)",
-                i,
+                self.optimizer.step_num(),
                 avg_loss,
                 timer.elapsed().as_millis()
             );

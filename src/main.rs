@@ -22,7 +22,6 @@ fn main() -> Result<(), TensorError> {
     let num_layers = 4;
     let num_heads = 4;
     let head_size = embedding_degree / num_heads;
-    let hiddens = 0;
     let dropout = 0.0;
 
     assert_eq!(num_heads * head_size, embedding_degree);
@@ -37,7 +36,6 @@ fn main() -> Result<(), TensorError> {
         num_layers,
         num_heads,
         head_size,
-        hiddens,
         dropout,
         femto_gpt::optimizer::AdamW::new(),
     )?;

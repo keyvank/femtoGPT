@@ -51,7 +51,7 @@ fn sample_dataset<R: Rng>(
 }
 
 fn embed(s: &Tensor<usize>, embedding: &Tensor<f32>) -> Result<Tensor<f32>, TensorError> {
-    s.map(0, |s| Ok(embedding.get(s.scalar()?).into()))
+    s.map(0, |s| Ok(embedding.get(s.scalar()?)?.into()))
 }
 
 use std::collections::HashMap;
@@ -70,8 +70,7 @@ fn unembed(
             avg = (&avg + v)?;
         }
         avg = (&avg * &Tensor::scalar(1. / vals.len() as f32))?;
-        let mut t = embedding.get_mut(ch);
-        t.set(avg.clone())?;
+        embedding.get_mut(ch)?.set(avg.clone())?;
     }
     Ok(())
 }
@@ -397,7 +396,7 @@ impl<O: Optimizer> GPT<O> {
             self.graph.forward(false)?;
             let next_ch = select(
                 rng,
-                &self.graph.get(self.output).get(0).get(cnt - 1),
+                &self.graph.get(self.output).get(0)?.get(cnt - 1)?,
                 temperature,
             )?;
             chs.push(next_ch);

@@ -4,4 +4,6 @@ use thiserror::Error;
 pub enum TensorError {
     #[error("unexpected tensor shape!")]
     UnexpectedShape,
+    #[error("invalid index!")]
+    InvalidIndex,
 }

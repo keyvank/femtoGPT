@@ -43,13 +43,16 @@ pub trait TensorMutOps<V: TensorElement>: TensorOps<V> {
         self.blob_mut().clone_from_slice(t.blob());
         Ok(())
     }
-    fn get_mut(&mut self, ind: usize) -> TensorMutView<V> {
+    fn get_mut(&mut self, ind: usize) -> Result<TensorMutView<V>, TensorError> {
+        if ind >= self.len() {
+            return Err(TensorError::InvalidIndex);
+        }
         let sub_size = self.size() / self.len();
-        TensorMutView {
+        Ok(TensorMutView {
             offset: self.offset() + sub_size * ind,
             shape: self.shape()[1..].to_vec(),
             mirror: self.tensor_mut(),
-        }
+        })
     }
 }
 
@@ -123,7 +126,9 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         }
     }
     fn inners<'a>(&'a self) -> Vec<TensorView<'a, V>> {
-        (0..self.len()).map(|i| self.get(i)).collect::<Vec<_>>()
+        (0..self.len())
+            .map(|i| self.get(i).unwrap())
+            .collect::<Vec<_>>()
     }
     fn dim(&self) -> usize {
         self.shape().len()
@@ -142,13 +147,16 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         }
     }
 
-    fn get(&self, ind: usize) -> TensorView<V> {
+    fn get(&self, ind: usize) -> Result<TensorView<V>, TensorError> {
+        if ind >= self.len() {
+            return Err(TensorError::InvalidIndex);
+        }
         let sub_size = self.size() / self.len();
-        TensorView {
+        Ok(TensorView {
             offset: self.offset() + sub_size * ind,
             shape: self.shape()[1..].to_vec(),
             mirror: self.tensor(),
-        }
+        })
     }
 
     fn transpose(&self) -> Result<Tensor<V>, TensorError> {

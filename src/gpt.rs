@@ -177,14 +177,14 @@ impl<O: Optimizer> GPT<O> {
             let bias1_params = g.alloc_rand(rng, &[4 * embedding_degree]);
             let lin1_result = g.call(MatMul::new(), &[add_atten_norm, lin1_params])?;
             let lin1_bias_result = g.call(Add::new(), &[lin1_result, bias1_params])?;
-            let mut lin_act = g.call(Gelu::new(), &[lin1_bias_result])?;
+            let mut lin_act = g.call(Relu::new(), &[lin1_bias_result])?;
             for _ in 0..hiddens {
                 let lin_params = g.alloc_rand(rng, &[4 * embedding_degree, 4 * embedding_degree]);
                 let bias_params = g.alloc_rand(rng, &[4 * embedding_degree]);
                 params.extend(&[lin_params, bias_params]);
                 let lin_result = g.call(MatMul::new(), &[lin_act, lin_params])?;
                 let lin_bias_result = g.call(Add::new(), &[lin_result, bias_params])?;
-                lin_act = g.call(Gelu::new(), &[lin_bias_result])?;
+                lin_act = g.call(Relu::new(), &[lin_bias_result])?;
             }
             let lin2_params = g.alloc_rand(rng, &[4 * embedding_degree, embedding_degree]);
             let bias2_params = g.alloc_rand(rng, &[embedding_degree]);

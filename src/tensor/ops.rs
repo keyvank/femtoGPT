@@ -17,18 +17,18 @@ pub fn binary<
     } else {
         (b.view(), a.view(), true)
     };
-    Ok(a.map(b.dim(), |a| {
+    a.map(b.dim(), |a| {
         assert_eq!(a.shape(), b.shape());
         let (a, b) = if rev { (&b, &a) } else { (&a, &b) };
-        Tensor::raw(
+        Ok(Tensor::raw(
             a.shape(),
             a.blob()
                 .iter()
                 .zip(b.blob().iter())
                 .map(|(a, b)| f(*a, *b))
                 .collect(),
-        )
-    }))
+        ))
+    })
 }
 
 impl<'a, V: TensorElement + std::ops::Add<Output = V>> Add for &TensorView<'a, V> {
@@ -54,7 +54,7 @@ impl<
         V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V> + std::ops::AddAssign,
     > BitXor for &TensorView<'a, V>
 {
-    type Output = Tensor<V>;
+    type Output = Result<Tensor<V>, TensorError>;
     fn bitxor(self, other: &TensorView<V>) -> Self::Output {
         let (a, b, rev) = if self.dim() > other.dim() {
             (self.view(), other.view(), false)
@@ -92,7 +92,7 @@ impl<
                 .collect();
             let mut final_shape = a.shape().to_vec();
             final_shape[a.dim() - 1] = b.shape()[b.dim() - 1];
-            Tensor::raw(&final_shape, data)
+            Ok(Tensor::raw(&final_shape, data))
         })
     }
 }

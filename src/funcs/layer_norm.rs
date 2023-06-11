@@ -24,11 +24,11 @@ impl Function for LayerNorm {
                 + EPSILON)
                 .sqrt();
             let var_inv = 1. / var;
-            Tensor::raw(
+            Ok(Tensor::raw(
                 l.shape(),
                 l.blob().iter().map(|v| (v - avg) * var_inv).collect(),
-            )
-        });
+            ))
+        })?;
         &(&self.norm * inps[1])? + inps[2]
     }
     fn grad(

@@ -4,4 +4,6 @@ use thiserror::Error;
 pub enum TensorError {
     #[error("incompatible tensor shapes!")]
     ShapeError,
+    #[error("map function is returning inconsistent shapes!")]
+    InconsistentShapes,
 }

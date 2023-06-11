@@ -19,15 +19,15 @@ impl Mask {
 
 impl Function for Mask {
     fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Result<Tensor<f32>, TensorError> {
-        Ok(inps[0].map(self.mask.dim(), |t| {
+        inps[0].map(self.mask.dim(), |t| {
             let dat = t
                 .blob()
                 .iter()
                 .zip(self.mask.blob().iter())
                 .map(|(v, m)| if *m == 1. { self.value } else { *v })
                 .collect::<Vec<_>>();
-            Tensor::raw(t.shape(), dat)
-        }))
+            Ok(Tensor::raw(t.shape(), dat))
+        })
     }
     fn grad(
         &self,

@@ -208,7 +208,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         Tensor::<bool>::raw(self.shape(), blob)
     }
 
-    fn argmax(&self) -> Tensor<usize>
+    fn argmax(&self) -> Result<Tensor<usize>, TensorError>
     where
         V: std::cmp::PartialOrd,
     {
@@ -221,7 +221,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
                     max_ind = i;
                 }
             }
-            Tensor::scalar(max_ind)
+            Ok(Tensor::scalar(max_ind))
         })
     }
 
@@ -232,24 +232,29 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         }
     }
 
-    fn map<W: TensorElement, F: Fn(TensorView<V>) -> Tensor<W> + Sync + Send>(
+    fn map<
+        W: TensorElement,
+        F: Fn(TensorView<V>) -> Result<Tensor<W>, TensorError> + Sync + Send,
+    >(
         &self,
         dim: usize,
         f: F,
-    ) -> Tensor<W> {
+    ) -> Result<Tensor<W>, TensorError> {
         let blob = self
             .keep_right(dim)
             .inners()
             .into_iter()
             .map(|v| f(v))
-            .collect::<Vec<_>>();
-        assert!(blob.iter().all(|t| t.shape() == blob[0].shape()));
+            .collect::<Result<Vec<_>, TensorError>>()?;
+        if !blob.iter().all(|t| t.shape() == blob[0].shape()) {
+            return Err(TensorError::InconsistentShapes);
+        }
         let mut out_shape = self.shape()[..self.dim() - dim].to_vec();
         out_shape.extend(blob[0].shape());
-        Tensor {
+        Ok(Tensor {
             blob: blob.into_iter().map(|t| t.blob).flatten().collect(),
             shape: out_shape,
-        }
+        })
     }
 
     fn scalar(&self) -> V {
@@ -323,7 +328,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         v
     }
 
-    fn transpose(&self) -> Tensor<V> {
+    fn transpose(&self) -> Result<Tensor<V>, TensorError> {
         self.map(2, |m| {
             let d0 = m.shape()[0];
             let d1 = m.shape()[1];
@@ -334,7 +339,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
                     dat.push(m_blob[i * d1 + j]);
                 }
             }
-            Tensor::raw(&[d1, d0], dat)
+            Ok(Tensor::raw(&[d1, d0], dat))
         })
     }
 }

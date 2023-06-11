@@ -10,7 +10,7 @@ impl MatMul {
 }
 impl Function for MatMul {
     fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Result<Tensor<f32>, TensorError> {
-        Ok(inps[0] ^ inps[1])
+        inps[0] ^ inps[1]
     }
     fn grad(
         &self,
@@ -18,8 +18,8 @@ impl Function for MatMul {
         out_grad: &Tensor<f32>,
     ) -> Result<Vec<Tensor<f32>>, TensorError> {
         Ok(vec![
-            out_grad ^ &inps[1].transpose(),
-            &inps[0].transpose() ^ out_grad,
+            (out_grad ^ &inps[1].transpose()?)?,
+            (&inps[0].transpose()? ^ out_grad)?,
         ])
     }
     fn clone_box(&self) -> Box<dyn Function> {

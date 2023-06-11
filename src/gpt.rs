@@ -51,8 +51,8 @@ fn sample_dataset<R: Rng>(
     )
 }
 
-fn embed(s: &Tensor<usize>, embedding: &Tensor<f32>) -> Tensor<f32> {
-    s.map(0, |s| embedding.get(s.scalar()).into())
+fn embed(s: &Tensor<usize>, embedding: &Tensor<f32>) -> Result<Tensor<f32>, TensorError> {
+    s.map(0, |s| Ok(embedding.get(s.scalar()).into()))
 }
 
 use std::collections::HashMap;
@@ -295,11 +295,11 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
                     let (xs, ys) = sample_dataset(dataset, 1, self.num_tokens, &mut rng);
                     graph.load(
                         self.token_input,
-                        &embed(&xs, graph.get(self.token_embedding)),
+                        &embed(&xs, graph.get(self.token_embedding))?,
                     );
                     graph.load(
                         self.pos_input,
-                        &embed(&poses, graph.get(self.pos_embedding)),
+                        &embed(&poses, graph.get(self.pos_embedding))?,
                     );
                     graph.forward(true)?;
                     graph.zero_grad();
@@ -377,7 +377,7 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
         let poses = Tensor::raw(&[1, self.num_tokens], (0..self.num_tokens).collect());
         self.graph.load(
             self.pos_input,
-            &embed(&poses, &self.graph.get(self.pos_embedding)),
+            &embed(&poses, &self.graph.get(self.pos_embedding))?,
         );
         for ch in prompt {
             callback(*ch);
@@ -389,7 +389,7 @@ impl<O: Optimizer, R: Rng> GPT<O, R> {
                 &embed(
                     &Tensor::raw(&[1, self.num_tokens], context.clone()),
                     self.graph.get(self.token_embedding),
-                ),
+                )?,
             );
             self.graph.forward(false)?;
             let next_ch = select(

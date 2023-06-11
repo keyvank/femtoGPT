@@ -71,7 +71,9 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
 
     fn keep_right(&self, dims: usize) -> Result<TensorView<V>, TensorError> {
         let mut shape = self.shape().to_vec();
-        if shape.len() == dims {
+        if shape.len() < dims {
+            return Err(TensorError::UnexpectedShape);
+        } else if shape.len() == dims {
             shape.insert(0, 1);
         } else {
             while shape.len() > dims + 1 {

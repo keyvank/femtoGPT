@@ -2,10 +2,12 @@ mod elements;
 mod error;
 mod helper;
 mod ops;
+mod view;
 pub use elements::*;
 pub use error::*;
 pub use helper::*;
 pub use ops::*;
+pub use view::*;
 
 use rand::prelude::*;
 use rand_distr::Normal;
@@ -27,64 +29,6 @@ impl<T: TensorOps<bool>> From<&T> for Tensor<f32> {
 unsafe impl<V: TensorElement> Send for Tensor<V> {}
 unsafe impl<V: TensorElement> Sync for Tensor<V> {}
 
-#[derive(Debug, Clone)]
-pub struct TensorView<'a, V: TensorElement> {
-    mirror: &'a Tensor<V>,
-    offset: usize,
-    shape: Vec<usize>,
-}
-
-impl<'a, V: TensorElement> TensorView<'a, V> {
-    pub fn zoom(&mut self, ind: usize) {
-        assert!(ind < self.shape[0]);
-        let sub_size = self.size() / self.len();
-        self.shape.remove(0);
-        self.offset += sub_size * ind;
-    }
-}
-
-impl<'a, V: TensorElement> TensorMutView<'a, V> {
-    pub fn zoom(&mut self, ind: usize) {
-        assert!(ind < self.shape[0]);
-        let sub_size = self.size() / self.len();
-        self.shape.remove(0);
-        self.offset += sub_size * ind;
-    }
-}
-
-#[derive(Debug)]
-pub struct TensorMutView<'a, V: TensorElement> {
-    mirror: &'a mut Tensor<V>,
-    offset: usize,
-    shape: Vec<usize>,
-}
-
-pub struct TensorIterMut<'a, V: TensorElement, T: TensorMutOps<V>> {
-    target: &'a mut T,
-    index: usize,
-    _value_type: std::marker::PhantomData<V>,
-}
-impl<'a, V: 'a + TensorElement, T: TensorMutOps<V>> Iterator for TensorIterMut<'a, V, T> {
-    type Item = TensorMutView<'a, V>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let ret = if self.index < self.target.len() {
-            unsafe {
-                let t = self.target.get_mut(self.index);
-                Some(TensorMutView {
-                    mirror: &mut *(t.mirror as *mut Tensor<V>),
-                    offset: t.offset,
-                    shape: t.shape,
-                })
-            }
-        } else {
-            None
-        };
-        self.index += 1;
-        ret
-    }
-}
-
 pub fn reshape(size: usize, shape: &[usize]) -> Vec<usize> {
     let mut final_shape = shape.to_vec();
     if shape[0] == 0 && shape[1..].iter().all(|s| *s != 0) {
@@ -103,20 +47,6 @@ pub trait TensorMutOps<V: TensorElement>: TensorOps<V> {
     fn blob_mut(&mut self) -> &mut [V];
     fn tensor_mut(&mut self) -> &mut Tensor<V>;
 
-    fn mean(&self) -> f32
-    where
-        V: std::iter::Sum,
-    {
-        self.blob().iter().cloned().sum::<V>().as_f32() / self.size() as f32
-    }
-
-    fn view_mut(&mut self) -> TensorMutView<V> {
-        TensorMutView {
-            offset: self.offset(),
-            shape: self.shape().to_vec(),
-            mirror: self.tensor_mut(),
-        }
-    }
     fn fill(&mut self, v: V) {
         self.blob_mut().fill(v);
     }
@@ -124,55 +54,13 @@ pub trait TensorMutOps<V: TensorElement>: TensorOps<V> {
         assert_eq!(self.shape(), t.shape());
         self.blob_mut().clone_from_slice(t.blob());
     }
-    fn reshape_mut(&mut self, shape: &[usize]) -> TensorMutView<V> {
-        let final_shape = reshape(self.size(), shape);
-        let new_size = final_shape.iter().fold(1, |c, s| c * s);
-        assert_eq!(new_size, self.size());
-        let offset = self.offset();
-        TensorMutView {
-            mirror: self.tensor_mut(),
-            offset: offset,
-            shape: final_shape.to_vec(),
-        }
-    }
-    fn keep_right_mut(&mut self, dims: usize) -> TensorMutView<V> {
-        let mut new_shape = self.shape().to_vec();
-        if self.dim() == dims {
-            new_shape.insert(0, 1);
-        }
-        for _i in 0..new_shape.len() - dims - 1 {
-            let rem = new_shape.remove(0);
-            new_shape[0] *= rem;
-        }
-        self.reshape_mut(&new_shape)
-    }
-
     fn get_mut(&mut self, ind: usize) -> TensorMutView<V> {
-        let mut v = self.view_mut();
-        v.zoom(ind);
-        v
-    }
-    fn iter_mut<'a>(&'a mut self) -> TensorIterMut<'a, V, Self> {
-        TensorIterMut {
-            target: self,
-            index: 0,
-            _value_type: std::marker::PhantomData::<V>,
+        let sub_size = self.size() / self.len();
+        TensorMutView {
+            offset: self.offset() + sub_size * ind,
+            shape: self.shape()[1..].to_vec(),
+            mirror: self.tensor_mut(),
         }
-    }
-}
-
-impl<V: TensorElement> From<TensorView<'_, V>> for Tensor<V> {
-    fn from(view: TensorView<'_, V>) -> Tensor<V> {
-        Tensor {
-            blob: view.blob().to_vec(),
-            shape: view.shape().to_vec(),
-        }
-    }
-}
-
-impl<V: TensorElement> From<TensorMutView<'_, V>> for Tensor<V> {
-    fn from(view: TensorMutView<'_, V>) -> Tensor<V> {
-        view.into()
     }
 }
 
@@ -181,6 +69,13 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
     fn blob(&self) -> &[V];
     fn tensor(&self) -> &Tensor<V>;
     fn offset(&self) -> usize;
+
+    fn mean(&self) -> f32
+    where
+        V: std::iter::Sum,
+    {
+        self.blob().iter().cloned().sum::<V>().as_f32() / self.size() as f32
+    }
 
     fn keep_right(&self, dims: usize) -> TensorView<V> {
         let mut new_shape = self.shape().to_vec();
@@ -192,37 +87,6 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
             new_shape[0] *= rem;
         }
         self.reshape(&new_shape)
-    }
-
-    fn equals<T2: TensorOps<V>>(&self, other: &T2) -> Tensor<bool>
-    where
-        V: PartialEq,
-    {
-        assert_eq!(self.shape(), other.shape());
-        let blob = self
-            .blob()
-            .iter()
-            .zip(other.blob().iter())
-            .map(|(a, b)| a == b)
-            .collect::<Vec<_>>();
-        Tensor::<bool>::raw(self.shape(), blob)
-    }
-
-    fn argmax(&self) -> Result<Tensor<usize>, TensorError>
-    where
-        V: std::cmp::PartialOrd,
-    {
-        self.map(1, |l| {
-            let mut max_ind = 0;
-            let mut max = l.get(0).scalar();
-            for i in 1..l.len() {
-                if l.get(i).scalar() > max {
-                    max = l.get(i).scalar();
-                    max_ind = i;
-                }
-            }
-            Ok(Tensor::scalar(max_ind))
-        })
     }
 
     fn map_values<W: TensorElement, F: Fn(V) -> W + Sync + Send>(&self, f: F) -> Tensor<W> {
@@ -287,29 +151,6 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         }
     }
 
-    fn unsqueeze(&self, at: isize) -> TensorView<V> {
-        let pos = if at >= 0 {
-            at
-        } else {
-            self.dim() as isize + at + 1
-        };
-        let mut new_shape = self.shape().to_vec();
-        new_shape.insert(pos as usize, 1);
-        self.reshape(&new_shape)
-    }
-
-    fn squeeze(&self, at: isize) -> TensorView<V> {
-        let pos = if at >= 0 {
-            at
-        } else {
-            self.dim() as isize + at
-        };
-        assert_eq!(self.shape()[pos as usize], 1);
-        let mut new_shape = self.shape().to_vec();
-        new_shape.remove(pos as usize);
-        self.reshape(&new_shape)
-    }
-
     fn reshape(&self, shape: &[usize]) -> TensorView<V> {
         let final_shape = reshape(self.size(), shape);
         let new_size = final_shape.iter().fold(1, |c, s| c * s);
@@ -323,9 +164,12 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
     }
 
     fn get(&self, ind: usize) -> TensorView<V> {
-        let mut v = self.view();
-        v.zoom(ind);
-        v
+        let sub_size = self.size() / self.len();
+        TensorView {
+            offset: self.offset() + sub_size * ind,
+            shape: self.shape()[1..].to_vec(),
+            mirror: self.tensor(),
+        }
     }
 
     fn transpose(&self) -> Result<Tensor<V>, TensorError> {
@@ -366,47 +210,6 @@ impl<V: TensorElement> TensorOps<V> for Tensor<V> {
     }
     fn blob(&self) -> &[V] {
         &self.blob
-    }
-}
-
-impl<V: TensorElement> TensorMutOps<V> for TensorMutView<'_, V> {
-    fn tensor_mut(&mut self) -> &mut Tensor<V> {
-        &mut self.mirror
-    }
-    fn blob_mut(&mut self) -> &mut [V] {
-        let sz = self.size();
-        &mut self.mirror.blob[self.offset..self.offset + sz]
-    }
-}
-
-impl<V: TensorElement> TensorOps<V> for TensorMutView<'_, V> {
-    fn tensor(&self) -> &Tensor<V> {
-        &self.mirror
-    }
-    fn offset(&self) -> usize {
-        self.offset
-    }
-    fn shape(&self) -> &[usize] {
-        &self.shape
-    }
-    fn blob(&self) -> &[V] {
-        let sz = self.size();
-        &self.mirror.blob[self.offset..self.offset + sz]
-    }
-}
-
-impl<V: TensorElement> TensorOps<V> for TensorView<'_, V> {
-    fn tensor(&self) -> &Tensor<V> {
-        &self.mirror
-    }
-    fn offset(&self) -> usize {
-        self.offset
-    }
-    fn shape(&self) -> &[usize] {
-        &self.shape
-    }
-    fn blob(&self) -> &[V] {
-        &self.mirror.blob[self.offset..self.offset + self.size()]
     }
 }
 

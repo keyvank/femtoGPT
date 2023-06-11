@@ -1,4 +1,5 @@
-use super::{Function, Tensor, TensorOps};
+use super::Function;
+use crate::tensor::*;
 
 #[derive(Debug, Clone)]
 pub struct LayerNorm {
@@ -15,7 +16,7 @@ impl LayerNorm {
 const EPSILON: f32 = 1e-5;
 
 impl Function for LayerNorm {
-    fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Tensor<f32> {
+    fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Result<Tensor<f32>, TensorError> {
         self.norm = inps[0].map(1, |l| {
             let size_inv = 1. / l.size() as f32;
             let avg = l.blob().iter().sum::<f32>() * size_inv;
@@ -28,9 +29,13 @@ impl Function for LayerNorm {
                 l.blob().iter().map(|v| (v - avg) * var_inv).collect(),
             )
         });
-        &(&self.norm * inps[1]) + inps[2]
+        &(&self.norm * inps[1])? + inps[2]
     }
-    fn grad(&self, inps: &[&Tensor<f32>], out_grad: &Tensor<f32>) -> Vec<Tensor<f32>> {
+    fn grad(
+        &self,
+        inps: &[&Tensor<f32>],
+        out_grad: &Tensor<f32>,
+    ) -> Result<Vec<Tensor<f32>>, TensorError> {
         let grad_inp0 = inps[0]
             .keep_right(1)
             .inners()
@@ -69,11 +74,11 @@ impl Function for LayerNorm {
             })
             .flatten()
             .collect::<Vec<_>>();
-        vec![
+        Ok(vec![
             Tensor::raw(out_grad.shape(), grad_inp0),
-            out_grad * &self.norm,
+            (out_grad * &self.norm)?,
             out_grad.clone(),
-        ]
+        ])
     }
     fn clone_box(&self) -> Box<dyn Function> {
         Box::new(self.clone())

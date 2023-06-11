@@ -1,5 +1,4 @@
 use super::{Loss, Tensor, TensorOps};
-use rayon::prelude::*;
 
 #[derive(Debug)]
 pub struct CrossEntropy {

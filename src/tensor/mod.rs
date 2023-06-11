@@ -1,13 +1,14 @@
 mod elements;
+mod error;
 mod helper;
 mod ops;
 pub use elements::*;
+pub use error::*;
 pub use helper::*;
 pub use ops::*;
 
 use rand::prelude::*;
 use rand_distr::Normal;
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::ops::*;
 

@@ -1,4 +1,5 @@
-use super::{Function, Tensor, TensorOps};
+use super::Function;
+use crate::tensor::*;
 
 #[derive(Debug, Clone)]
 pub struct Softmax {
@@ -12,7 +13,7 @@ impl Softmax {
     }
 }
 impl Function for Softmax {
-    fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Tensor<f32> {
+    fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Result<Tensor<f32>, TensorError> {
         self.out = inps[0].map(1, |l| {
             let max = l
                 .blob()
@@ -22,9 +23,13 @@ impl Function for Softmax {
             l.map_values(|f| (f - max).exp() / sum)
         });
 
-        self.out.clone()
+        Ok(self.out.clone())
     }
-    fn grad(&self, _inps: &[&Tensor<f32>], out_grad: &Tensor<f32>) -> Vec<Tensor<f32>> {
+    fn grad(
+        &self,
+        _inps: &[&Tensor<f32>],
+        out_grad: &Tensor<f32>,
+    ) -> Result<Vec<Tensor<f32>>, TensorError> {
         let grad_inp0 = self
             .out
             .keep_right(1)
@@ -49,7 +54,7 @@ impl Function for Softmax {
             })
             .flatten()
             .collect::<Vec<_>>();
-        vec![Tensor::raw(out_grad.shape(), grad_inp0)]
+        Ok(vec![Tensor::raw(out_grad.shape(), grad_inp0)])
     }
     fn clone_box(&self) -> Box<dyn Function> {
         Box::new(self.clone())

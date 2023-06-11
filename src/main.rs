@@ -1,9 +1,10 @@
 use femto_gpt::gpt::GPT;
+use femto_gpt::tensor::TensorError;
 use femto_gpt::tokenizer::{SimpleTokenizer, Tokenizer};
 
 use std::fs;
 
-fn main() {
+fn main() -> Result<(), TensorError> {
     let mut rng = rand::thread_rng();
 
     // Create a unique char-to-int mapping for all unique characters inside our dataset
@@ -39,7 +40,7 @@ fn main() {
         hiddens,
         dropout,
         femto_gpt::optimizer::AdamW::new(),
-    );
+    )?;
 
     println!("Number of parameters: {}", gpt.num_params());
 
@@ -50,12 +51,16 @@ fn main() {
 
     let inference_temperature = 0.5; // How creative? 0.0 min 1.0 max
 
+    let inference = gpt.infer(
+        &tokenizer.tokenize("\n"),
+        100,
+        inference_temperature,
+        |_ch| {},
+    )?;
+
     // Generate 100 character with the currently trained model before
     // starting the training loop.
-    println!(
-        "{}",
-        tokenizer.untokenize(&gpt.infer(&tokenizer.tokenize("\n"), 100, 0.5, |_ch| {}))
-    );
+    println!("{}", tokenizer.untokenize(&inference));
 
     println!();
     println!("Starting the training loop... (This make take hours to converge! be patient!)");
@@ -77,5 +82,7 @@ fn main() {
                 base_lr - (base_lr - min_lr) * (step - warmup_steps) as f32 / decay_steps as f32,
             )
         }
-    });
+    })?;
+
+    Ok(())
 }

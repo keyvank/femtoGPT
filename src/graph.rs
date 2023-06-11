@@ -20,12 +20,6 @@ impl Clone for Computation {
     }
 }
 
-#[derive(Clone)]
-pub struct Env {
-    tensors: BTreeMap<TensorId, Tensor<f32>>,
-    grads: BTreeMap<TensorId, Tensor<f32>>,
-}
-
 unsafe impl Send for Computation {}
 unsafe impl Sync for Computation {}
 
@@ -61,17 +55,18 @@ impl Graph {
     pub fn zero_grad(&mut self) {
         self.grads.clear();
     }
-    pub fn add_grad<T: TensorOps<f32>>(&mut self, id: TensorId, add: T) {
+    pub fn add_grad<T: TensorOps<f32>>(&mut self, id: TensorId, add: T) -> Result<(), TensorError> {
         let mut shape = self.get(id).shape().to_vec();
         let grad = self.grads.entry(id).or_insert(Tensor::zeros(&shape));
         if add.dim() >= shape.len() {
             shape.insert(0, 0);
             for t in add.reshape(&shape).inners().iter() {
-                *grad = &*grad + t;
+                *grad = (&*grad + t)?;
             }
         } else {
-            *grad = &*grad + &add.view();
+            *grad = (&*grad + &add.view())?;
         }
+        Ok(())
     }
     pub fn get(&self, id: TensorId) -> &Tensor<f32> {
         self.tensors.get(&id).expect("Tensor not found!")
@@ -79,11 +74,15 @@ impl Graph {
     pub fn get_grad(&self, id: TensorId) -> &Tensor<f32> {
         self.grads.get(&id).expect("Tensor not found!")
     }
-    pub fn backward_all(&mut self, id: TensorId, loss_fn: Box<dyn Loss>) -> f32 {
+    pub fn backward_all(
+        &mut self,
+        id: TensorId,
+        loss_fn: Box<dyn Loss>,
+    ) -> Result<f32, TensorError> {
         let output = self.get(id);
         let (loss, grad) = loss_fn.run(output);
         let mean_coeff = 1. / loss.size() as f32;
-        self.add_grad(id, &grad * &Tensor::scalar(mean_coeff));
+        self.add_grad(id, (&grad * &Tensor::scalar(mean_coeff))?)?;
 
         for (id, comp) in self.computations.clone().iter().rev() {
             for inp in comp.inps.iter() {
@@ -98,31 +97,36 @@ impl Graph {
                 .map(|id| &self.tensors[id])
                 .collect::<Vec<_>>();
             let grad_out = &self.grads[&id];
-            let grads = comp.func.grad(&inps, grad_out);
+            let grads = comp.func.grad(&inps, grad_out)?;
             for (id, grad) in comp.inps.clone().into_iter().zip(grads.into_iter()) {
-                self.add_grad(id, grad);
+                self.add_grad(id, grad)?;
             }
         }
 
-        loss.mean()
+        Ok(loss.mean())
     }
-    pub fn forward(&mut self, training: bool) {
+    pub fn forward(&mut self, training: bool) -> Result<(), TensorError> {
         for (out, c) in self.computations.iter_mut() {
             let tensors = c
                 .inps
                 .iter()
                 .map(|id| self.tensors.get(id).expect("Tensor not found!"))
                 .collect::<Vec<_>>();
-            let result = c.func.run(&tensors, training);
+            let result = c.func.run(&tensors, training)?;
             self.tensors.insert(*out, result);
         }
+        Ok(())
     }
-    pub fn call(&mut self, mut f: Box<dyn Function>, tensor_ids: &[TensorId]) -> TensorId {
+    pub fn call(
+        &mut self,
+        mut f: Box<dyn Function>,
+        tensor_ids: &[TensorId],
+    ) -> Result<TensorId, TensorError> {
         let tensors = tensor_ids
             .iter()
             .map(|id| self.tensors.get(id).expect("Tensor not found!"))
             .collect::<Vec<_>>();
-        let out = f.run(&tensors, false);
+        let out = f.run(&tensors, false)?;
         let child = self.alloc(out);
         self.computations.insert(
             child,
@@ -131,14 +135,14 @@ impl Graph {
                 inps: tensor_ids.to_vec(),
             },
         );
-        child
+        Ok(child)
     }
     pub fn optimize<O: Optimizer>(
         &mut self,
         opt: &mut O,
         params: &HashSet<TensorId>,
         learning_rate: f32,
-    ) {
+    ) -> Result<(), TensorError> {
         let (params, grads): (Vec<&mut Tensor<f32>>, Vec<&Tensor<f32>>) = self
             .tensors
             .iter_mut()
@@ -150,6 +154,7 @@ impl Graph {
             .collect::<Vec<_>>()
             .into_iter()
             .unzip();
-        opt.step(params, grads, learning_rate);
+        opt.step(params, grads, learning_rate)?;
+        Ok(())
     }
 }

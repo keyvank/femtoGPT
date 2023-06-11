@@ -1,4 +1,5 @@
-use super::{Function, Tensor, TensorOps};
+use super::Function;
+use crate::tensor::*;
 
 #[derive(Debug, Clone)]
 pub struct Mask {
@@ -17,8 +18,8 @@ impl Mask {
 }
 
 impl Function for Mask {
-    fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Tensor<f32> {
-        inps[0].map(self.mask.dim(), |t| {
+    fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Result<Tensor<f32>, TensorError> {
+        Ok(inps[0].map(self.mask.dim(), |t| {
             let dat = t
                 .blob()
                 .iter()
@@ -26,10 +27,14 @@ impl Function for Mask {
                 .map(|(v, m)| if *m == 1. { self.value } else { *v })
                 .collect::<Vec<_>>();
             Tensor::raw(t.shape(), dat)
-        })
+        }))
     }
-    fn grad(&self, _inps: &[&Tensor<f32>], out_grad: &Tensor<f32>) -> Vec<Tensor<f32>> {
-        vec![out_grad * &self.mask_rev]
+    fn grad(
+        &self,
+        _inps: &[&Tensor<f32>],
+        out_grad: &Tensor<f32>,
+    ) -> Result<Vec<Tensor<f32>>, TensorError> {
+        Ok(vec![(out_grad * &self.mask_rev)?])
     }
     fn clone_box(&self) -> Box<dyn Function> {
         Box::new(self.clone())

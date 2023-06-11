@@ -11,13 +11,13 @@ pub fn binary<
     a: &T1,
     b: &T2,
     f: F,
-) -> Tensor<W> {
+) -> Result<Tensor<W>, TensorError> {
     let (a, b, rev) = if a.dim() > b.dim() {
         (a.view(), b.view(), false)
     } else {
         (b.view(), a.view(), true)
     };
-    a.map(b.dim(), |a| {
+    Ok(a.map(b.dim(), |a| {
         assert_eq!(a.shape(), b.shape());
         let (a, b) = if rev { (&b, &a) } else { (&a, &b) };
         Tensor::raw(
@@ -28,23 +28,23 @@ pub fn binary<
                 .map(|(a, b)| f(*a, *b))
                 .collect(),
         )
-    })
+    }))
 }
 
 impl<'a, V: TensorElement + std::ops::Add<Output = V>> Add for &TensorView<'a, V> {
-    type Output = Tensor<V>;
+    type Output = Result<Tensor<V>, TensorError>;
     fn add(self, other: &TensorView<V>) -> Self::Output {
         binary(self, other, |a, b| a + b)
     }
 }
 impl<'a, V: TensorElement + std::ops::Sub<Output = V>> Sub for &TensorView<'a, V> {
-    type Output = Tensor<V>;
+    type Output = Result<Tensor<V>, TensorError>;
     fn sub(self, other: &TensorView<V>) -> Self::Output {
         binary(self, other, |a, b| a - b)
     }
 }
 impl<'a, V: TensorElement + std::ops::Mul<Output = V>> Mul for &TensorView<'a, V> {
-    type Output = Tensor<V>;
+    type Output = Result<Tensor<V>, TensorError>;
     fn mul(self, other: &TensorView<V>) -> Self::Output {
         binary(self, other, |a, b| a * b)
     }

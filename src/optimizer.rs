@@ -1,11 +1,16 @@
 use serde::{Deserialize, Serialize};
 
-use crate::tensor::{Tensor, TensorOps};
+use crate::tensor::{Tensor, TensorError, TensorOps};
 use rayon::prelude::*;
-use std::collections::HashMap;
+
 pub trait Optimizer: Serialize + serde::de::DeserializeOwned {
     fn step_num(&self) -> usize;
-    fn step(&mut self, params: Vec<&mut Tensor<f32>>, grads: Vec<&Tensor<f32>>, learning_rate: f32);
+    fn step(
+        &mut self,
+        params: Vec<&mut Tensor<f32>>,
+        grads: Vec<&Tensor<f32>>,
+        learning_rate: f32,
+    ) -> Result<(), TensorError>;
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -30,10 +35,11 @@ impl Optimizer for Naive {
         params: Vec<&mut Tensor<f32>>,
         grads: Vec<&Tensor<f32>>,
         learning_rate: f32,
-    ) {
+    ) -> Result<(), TensorError> {
         for (param, grad) in params.into_iter().zip(grads.into_iter()) {
-            *param = &*param + &(grad * &Tensor::scalar(-learning_rate));
+            *param = (&*param + &(grad * &Tensor::scalar(-learning_rate))?)?;
         }
+        Ok(())
     }
 }
 
@@ -73,7 +79,7 @@ impl Optimizer for AdamW {
         params: Vec<&mut Tensor<f32>>,
         grads: Vec<&Tensor<f32>>,
         learning_rate: f32,
-    ) {
+    ) -> Result<(), TensorError> {
         if self.m.len() == 0 || self.v.len() == 0 {
             self.m = vec![Tensor::scalar(0.); params.len()];
             self.v = vec![Tensor::scalar(0.); params.len()];
@@ -83,22 +89,27 @@ impl Optimizer for AdamW {
             .zip(grads.into_par_iter())
             .zip(self.m.par_iter_mut())
             .zip(self.v.par_iter_mut())
-            .enumerate()
-            .for_each(|(t, (((param, grad), m), v))| {
+            .map(|(((param, grad), m), v)| {
                 // Weight decay
-                *param = &*param - &(&*param * &Tensor::scalar(learning_rate * self.weight_decay));
+                *param =
+                    (&*param - &(&*param * &Tensor::scalar(learning_rate * self.weight_decay))?)?;
 
-                *m = &(&Tensor::scalar(self.beta1) * &*m)
-                    + &(&Tensor::scalar(1. - self.beta1) * grad);
-                *v = &(&Tensor::scalar(self.beta2) * &*v)
-                    + &(&(&Tensor::scalar(1. - self.beta2) * grad) * grad);
-                let m_hat = &*m * &Tensor::scalar(1. / (1. - self.beta1.powi(self.t as i32 + 1)));
-                let v_hat = &*v * &Tensor::scalar(1. / (1. - self.beta2.powi(self.t as i32 + 1)));
+                *m = (&(&Tensor::scalar(self.beta1) * &*m)?
+                    + &(&Tensor::scalar(1. - self.beta1) * grad)?)?;
+                *v = (&(&Tensor::scalar(self.beta2) * &*v)?
+                    + &(&(&Tensor::scalar(1. - self.beta2) * grad)? * grad)?)?;
+                let m_hat =
+                    (&*m * &Tensor::scalar(1. / (1. - self.beta1.powi(self.t as i32 + 1))))?;
+                let v_hat =
+                    (&*v * &Tensor::scalar(1. / (1. - self.beta2.powi(self.t as i32 + 1))))?;
 
                 let v_hat_sqrt_inv = v_hat.map_values(|f| learning_rate / (f.sqrt() + EPSILON));
 
-                *param = &*param - &(&m_hat * &v_hat_sqrt_inv);
-            });
+                *param = (&*param - &(&m_hat * &v_hat_sqrt_inv)?)?;
+                Ok(())
+            })
+            .collect::<Result<Vec<()>, TensorError>>()?;
         self.t += 1;
+        Ok(())
     }
 }

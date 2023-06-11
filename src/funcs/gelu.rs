@@ -5,7 +5,7 @@ const SQRT_2_OVER_PI: f32 = 0.7978845608;
 const GELU_CONST: f32 = 0.044715;
 
 fn gelu(x: f32) -> f32 {
-    0.5 * x * ((SQRT_2_OVER_PI * (x + 0.044715 * x.powi(3))).tanh() + 1.)
+    0.5 * x * ((SQRT_2_OVER_PI * (x + GELU_CONST * x.powi(3))).tanh() + 1.)
 }
 
 fn gelu_prime(x: f32) -> f32 {

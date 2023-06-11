@@ -45,13 +45,14 @@ fn main() -> Result<(), TensorError> {
     println!("Number of parameters: {}", gpt.num_params());
 
     // Load training data from train_data directory (If exists)
-    gpt.load();
+    gpt.load("train_data");
 
     println!("Generating text:");
 
     let inference_temperature = 0.5; // How creative? 0.0 min 1.0 max
 
     let inference = gpt.infer(
+        &mut rng,
         &tokenizer.tokenize("\n"),
         100,
         inference_temperature,

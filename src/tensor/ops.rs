@@ -65,10 +65,10 @@ impl<
             assert_eq!(a.shape()[..a.dim() - 2], b.shape()[..b.dim() - 2]);
             let (a, b) = if rev { (&b, &a) } else { (&a, &b) };
             let data = a
-                .keep_right(2)
+                .keep_right(2)?
                 .inners()
                 .iter()
-                .zip(b.keep_right(2).inners().iter())
+                .zip(b.keep_right(2)?.inners().iter())
                 .map(|(a, b)| {
                     let m = a.shape()[0];
                     let n = a.shape()[1];

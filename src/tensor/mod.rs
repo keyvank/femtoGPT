@@ -50,9 +50,12 @@ pub trait TensorMutOps<V: TensorElement>: TensorOps<V> {
     fn fill(&mut self, v: V) {
         self.blob_mut().fill(v);
     }
-    fn set<T: TensorOps<V>>(&mut self, t: T) {
-        assert_eq!(self.shape(), t.shape());
+    fn set<T: TensorOps<V>>(&mut self, t: T) -> Result<(), TensorError> {
+        if self.shape() != t.shape() {
+            return Err(TensorError::ShapeError);
+        }
         self.blob_mut().clone_from_slice(t.blob());
+        Ok(())
     }
     fn get_mut(&mut self, ind: usize) -> TensorMutView<V> {
         let sub_size = self.size() / self.len();
@@ -77,7 +80,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         self.blob().iter().cloned().sum::<V>().as_f32() / self.size() as f32
     }
 
-    fn keep_right(&self, dims: usize) -> TensorView<V> {
+    fn keep_right(&self, dims: usize) -> Result<TensorView<V>, TensorError> {
         let mut new_shape = self.shape().to_vec();
         if self.dim() == dims {
             new_shape.insert(0, 1);
@@ -105,7 +108,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         f: F,
     ) -> Result<Tensor<W>, TensorError> {
         let blob = self
-            .keep_right(dim)
+            .keep_right(dim)?
             .inners()
             .into_iter()
             .map(|v| f(v))
@@ -121,11 +124,11 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         })
     }
 
-    fn scalar(&self) -> V {
+    fn scalar(&self) -> Result<V, TensorError> {
         if self.dim() == 0 {
-            self.blob()[0]
+            Ok(self.blob()[0])
         } else {
-            panic!("Tensor is not a scalar!")
+            Err(TensorError::NotScalar)
         }
     }
     fn inners<'a>(&'a self) -> Vec<TensorView<'a, V>> {
@@ -151,16 +154,18 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         }
     }
 
-    fn reshape(&self, shape: &[usize]) -> TensorView<V> {
+    fn reshape(&self, shape: &[usize]) -> Result<TensorView<V>, TensorError> {
         let final_shape = reshape(self.size(), shape);
         let new_size = final_shape.iter().fold(1, |c, s| c * s);
-        assert_eq!(new_size, self.size());
+        if new_size != self.size() {
+            return Err(TensorError::ShapeError);
+        }
         let offset = self.offset();
-        TensorView {
+        Ok(TensorView {
             mirror: self.tensor(),
             offset: offset,
             shape: final_shape,
-        }
+        })
     }
 
     fn get(&self, ind: usize) -> TensorView<V> {

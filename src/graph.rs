@@ -60,7 +60,7 @@ impl Graph {
         let grad = self.grads.entry(id).or_insert(Tensor::zeros(&shape));
         if add.dim() >= shape.len() {
             shape.insert(0, 0);
-            for t in add.reshape(&shape).inners().iter() {
+            for t in add.reshape(&shape)?.inners().iter() {
                 *grad = (&*grad + t)?;
             }
         } else {
@@ -80,7 +80,7 @@ impl Graph {
         loss_fn: Box<dyn Loss>,
     ) -> Result<f32, TensorError> {
         let output = self.get(id);
-        let (loss, grad) = loss_fn.run(output);
+        let (loss, grad) = loss_fn.run(output)?;
         let mean_coeff = 1. / loss.size() as f32;
         self.add_grad(id, (&grad * &Tensor::scalar(mean_coeff))?)?;
 

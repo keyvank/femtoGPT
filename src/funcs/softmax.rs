@@ -32,10 +32,10 @@ impl Function for Softmax {
     ) -> Result<Vec<Tensor<f32>>, TensorError> {
         let grad_inp0 = self
             .out
-            .keep_right(1)
+            .keep_right(1)?
             .inners()
             .iter()
-            .zip(out_grad.keep_right(1).inners().iter())
+            .zip(out_grad.keep_right(1)?.inners().iter())
             .map(|(l, o)| {
                 let l_blob = l.blob();
                 let o_blob = o.blob();

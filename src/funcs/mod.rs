@@ -35,5 +35,5 @@ pub trait Function: std::fmt::Debug {
 }
 
 pub trait Loss: std::fmt::Debug {
-    fn run(&self, inp: &Tensor<f32>) -> (Tensor<f32>, Tensor<f32>);
+    fn run(&self, inp: &Tensor<f32>) -> Result<(Tensor<f32>, Tensor<f32>), TensorError>;
 }

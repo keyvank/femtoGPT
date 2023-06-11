@@ -6,4 +6,6 @@ pub enum TensorError {
     ShapeError,
     #[error("map function is returning inconsistent shapes!")]
     InconsistentShapes,
+    #[error("not a scalar!")]
+    NotScalar,
 }

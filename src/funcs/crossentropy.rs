@@ -1,4 +1,5 @@
-use super::{Loss, Tensor, TensorOps};
+use super::Loss;
+use crate::tensor::*;
 
 #[derive(Debug)]
 pub struct CrossEntropy {
@@ -12,12 +13,12 @@ impl CrossEntropy {
 }
 
 impl Loss for CrossEntropy {
-    fn run(&self, inp: &Tensor<f32>) -> (Tensor<f32>, Tensor<f32>) {
+    fn run(&self, inp: &Tensor<f32>) -> Result<(Tensor<f32>, Tensor<f32>), TensorError> {
         let grad_shape = inp.shape().to_vec();
         let mut loss_shape = grad_shape.clone();
         loss_shape.pop();
         let (loss, grad): (Vec<f32>, Vec<Vec<f32>>) = inp
-            .keep_right(1)
+            .keep_right(1)?
             .inners()
             .iter()
             .zip(self.target.blob().iter())
@@ -42,9 +43,9 @@ impl Loss for CrossEntropy {
             })
             .unzip();
 
-        (
+        Ok((
             Tensor::raw(&loss_shape, loss),
             Tensor::raw(&grad_shape, grad.into_iter().flatten().collect()),
-        )
+        ))
     }
 }

@@ -50,10 +50,6 @@ fn sample_dataset<R: Rng>(
     )
 }
 
-fn embed(s: &Tensor<usize>, embedding: &Tensor<f32>) -> Result<Tensor<f32>, TensorError> {
-    s.map(0, |s| Ok(embedding.get(s.scalar()?)?.into()))
-}
-
 use std::collections::HashMap;
 fn unembed(
     s: &Tensor<usize>,
@@ -294,14 +290,8 @@ impl<O: Optimizer> GPT<O> {
                             .collect(),
                     );
                     let (xs, ys) = sample_dataset(dataset, 1, self.num_tokens, &mut rng);
-                    graph.load(
-                        self.token_input,
-                        &embed(&xs, graph.get(self.token_embedding))?,
-                    );
-                    graph.load(
-                        self.pos_input,
-                        &embed(&poses, graph.get(self.pos_embedding))?,
-                    );
+                    graph.embed(self.token_input, self.token_embedding, &xs)?;
+                    graph.embed(self.pos_input, self.pos_embedding, &poses)?;
                     graph.forward(true)?;
                     graph.zero_grad();
                     let err = graph.backward_all(
@@ -377,22 +367,18 @@ impl<O: Optimizer> GPT<O> {
         let mut context = vec![0; self.num_tokens];
         context[..prompt.len()].copy_from_slice(prompt);
         let poses = Tensor::raw(&[self.num_tokens], (0..self.num_tokens).collect());
-        self.graph.load(
-            self.pos_input,
-            &embed(&poses, &self.graph.get(self.pos_embedding))?,
-        );
+        self.graph
+            .embed(self.pos_input, self.pos_embedding, &poses)?;
         for ch in prompt {
             callback(*ch);
         }
         let mut chs = prompt.to_vec();
         for _ in 0..count {
-            self.graph.load(
+            self.graph.embed(
                 self.token_input,
-                &embed(
-                    &Tensor::raw(&[self.num_tokens], context.clone()),
-                    self.graph.get(self.token_embedding),
-                )?,
-            );
+                self.token_embedding,
+                &Tensor::raw(&[self.num_tokens], context.clone()),
+            )?;
             self.graph.forward(false)?;
             let next_ch = select(rng, &self.graph.get(self.output).get(cnt - 1)?, temperature)?;
             chs.push(next_ch);

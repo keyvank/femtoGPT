@@ -49,6 +49,19 @@ impl Graph {
     pub fn load<T: TensorOps<f32>>(&mut self, tensor_id: TensorId, tensor: &T) {
         self.tensors.insert(tensor_id, tensor.view().into());
     }
+    pub fn embed<T: TensorOps<usize>>(
+        &mut self,
+        tensor_id: TensorId,
+        embedding_id: TensorId,
+        input: &T,
+    ) -> Result<(), TensorError> {
+        let embedding = self.get(embedding_id);
+        self.load(
+            tensor_id,
+            &input.map(0, |s| Ok(embedding.get(s.scalar()?)?.into()))?,
+        );
+        Ok(())
+    }
     pub fn load_grad<T: TensorOps<f32>>(&mut self, tensor_id: TensorId, tensor: &T) {
         self.grads.insert(tensor_id, tensor.view().into());
     }

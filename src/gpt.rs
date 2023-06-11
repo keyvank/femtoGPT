@@ -112,8 +112,8 @@ impl<O: Optimizer> GPT<O> {
         let token_embedding = g.alloc_rand(rng, &[vocab_size, embedding_degree]);
         let pos_embedding = g.alloc_rand(rng, &[num_tokens, embedding_degree]);
 
-        let token_input = g.alloc_rand(rng, &[1, num_tokens, embedding_degree]);
-        let pos_input = g.alloc_rand(rng, &[1, num_tokens, embedding_degree]);
+        let token_input = g.alloc_rand(rng, &[num_tokens, embedding_degree]);
+        let pos_input = g.alloc_rand(rng, &[num_tokens, embedding_degree]);
         let inp = g.call(Add::new(), &[token_input, pos_input])?;
 
         // Keep track of tensor-ids of learnable tensors!
@@ -287,7 +287,7 @@ impl<O: Optimizer> GPT<O> {
                     let mut rng = rand::thread_rng();
                     let mut graph = self.graph.clone();
                     let poses = Tensor::raw(
-                        &[1, self.num_tokens],
+                        &[self.num_tokens],
                         (0..self.num_tokens)
                             .cycle()
                             .take(self.num_tokens * 1)
@@ -376,7 +376,7 @@ impl<O: Optimizer> GPT<O> {
         let mut cnt = prompt.len();
         let mut context = vec![0; self.num_tokens];
         context[..prompt.len()].copy_from_slice(prompt);
-        let poses = Tensor::raw(&[1, self.num_tokens], (0..self.num_tokens).collect());
+        let poses = Tensor::raw(&[self.num_tokens], (0..self.num_tokens).collect());
         self.graph.load(
             self.pos_input,
             &embed(&poses, &self.graph.get(self.pos_embedding))?,
@@ -389,16 +389,12 @@ impl<O: Optimizer> GPT<O> {
             self.graph.load(
                 self.token_input,
                 &embed(
-                    &Tensor::raw(&[1, self.num_tokens], context.clone()),
+                    &Tensor::raw(&[self.num_tokens], context.clone()),
                     self.graph.get(self.token_embedding),
                 )?,
             );
             self.graph.forward(false)?;
-            let next_ch = select(
-                rng,
-                &self.graph.get(self.output).get(0)?.get(cnt - 1)?,
-                temperature,
-            )?;
+            let next_ch = select(rng, &self.graph.get(self.output).get(cnt - 1)?, temperature)?;
             chs.push(next_ch);
             callback(next_ch);
             if cnt == self.num_tokens {

@@ -56,11 +56,10 @@ impl Graph {
         self.grads.clear();
     }
     pub fn add_grad<T: TensorOps<f32>>(&mut self, id: TensorId, add: T) -> Result<(), TensorError> {
-        let mut shape = self.get(id).shape().to_vec();
+        let shape = self.get(id).shape().to_vec();
         let grad = self.grads.entry(id).or_insert(Tensor::zeros(&shape));
         if add.dim() >= shape.len() {
-            shape.insert(0, 0);
-            for t in add.reshape(&shape)?.inners().iter() {
+            for t in add.keep_right(shape.len())?.inners().iter() {
                 *grad = (&*grad + t)?;
             }
         } else {

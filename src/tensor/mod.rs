@@ -29,20 +29,6 @@ impl<T: TensorOps<bool>> From<&T> for Tensor<f32> {
 unsafe impl<V: TensorElement> Send for Tensor<V> {}
 unsafe impl<V: TensorElement> Sync for Tensor<V> {}
 
-pub fn reshape(size: usize, shape: &[usize]) -> Vec<usize> {
-    let mut final_shape = shape.to_vec();
-    if shape[0] == 0 && shape[1..].iter().all(|s| *s != 0) {
-        let mul = shape[1..].iter().fold(1, |c, s| c * s);
-        final_shape[0] = size / mul;
-    } else if shape[shape.len() - 1] == 0 && shape[0..shape.len() - 1].iter().all(|s| *s != 0) {
-        let mul = shape[..shape.len() - 1].iter().fold(1, |c, s| c * s);
-        final_shape[shape.len() - 1] = size / mul;
-    } else {
-        assert!(shape.iter().all(|s| *s != 0));
-    };
-    final_shape
-}
-
 pub trait TensorMutOps<V: TensorElement>: TensorOps<V> {
     fn blob_mut(&mut self) -> &mut [V];
     fn tensor_mut(&mut self) -> &mut Tensor<V>;
@@ -52,7 +38,7 @@ pub trait TensorMutOps<V: TensorElement>: TensorOps<V> {
     }
     fn set<T: TensorOps<V>>(&mut self, t: T) -> Result<(), TensorError> {
         if self.shape() != t.shape() {
-            return Err(TensorError::ShapeError);
+            return Err(TensorError::UnexpectedShape);
         }
         self.blob_mut().clone_from_slice(t.blob());
         Ok(())
@@ -81,15 +67,20 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
     }
 
     fn keep_right(&self, dims: usize) -> Result<TensorView<V>, TensorError> {
-        let mut new_shape = self.shape().to_vec();
-        if self.dim() == dims {
-            new_shape.insert(0, 1);
+        let mut shape = self.shape().to_vec();
+        if shape.len() == dims {
+            shape.insert(0, 1);
+        } else {
+            while shape.len() > dims + 1 {
+                let rem = shape.remove(0);
+                shape[0] *= rem;
+            }
         }
-        for _i in 0..new_shape.len() - dims - 1 {
-            let rem = new_shape.remove(0);
-            new_shape[0] *= rem;
-        }
-        self.reshape(&new_shape)
+        Ok(TensorView {
+            mirror: self.tensor(),
+            offset: self.offset(),
+            shape,
+        })
     }
 
     fn map_values<W: TensorElement, F: Fn(V) -> W + Sync + Send>(&self, f: F) -> Tensor<W> {
@@ -114,7 +105,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
             .map(|v| f(v))
             .collect::<Result<Vec<_>, TensorError>>()?;
         if !blob.iter().all(|t| t.shape() == blob[0].shape()) {
-            return Err(TensorError::InconsistentShapes);
+            return Err(TensorError::UnexpectedShape);
         }
         let mut out_shape = self.shape()[..self.dim() - dim].to_vec();
         out_shape.extend(blob[0].shape());
@@ -128,7 +119,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         if self.dim() == 0 {
             Ok(self.blob()[0])
         } else {
-            Err(TensorError::NotScalar)
+            Err(TensorError::UnexpectedShape)
         }
     }
     fn inners<'a>(&'a self) -> Vec<TensorView<'a, V>> {
@@ -138,10 +129,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         self.shape().len()
     }
     fn len(&self) -> usize {
-        *self
-            .shape()
-            .get(0)
-            .expect("Scalar values don't have a size!")
+        *self.shape().get(0).unwrap_or(&0) // Scalar has a len of 0
     }
     fn size(&self) -> usize {
         self.shape().iter().fold(1, |curr, s| curr * s)
@@ -152,20 +140,6 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
             offset: self.offset(),
             shape: self.shape().to_vec(),
         }
-    }
-
-    fn reshape(&self, shape: &[usize]) -> Result<TensorView<V>, TensorError> {
-        let final_shape = reshape(self.size(), shape);
-        let new_size = final_shape.iter().fold(1, |c, s| c * s);
-        if new_size != self.size() {
-            return Err(TensorError::ShapeError);
-        }
-        let offset = self.offset();
-        Ok(TensorView {
-            mirror: self.tensor(),
-            offset: offset,
-            shape: final_shape,
-        })
     }
 
     fn get(&self, ind: usize) -> TensorView<V> {
@@ -276,13 +250,15 @@ impl<V: TensorElement> Tensor<V> {
             shape: shape.to_vec(),
         }
     }
-    pub fn cat<T: TensorOps<V>>(inps: &[&T]) -> Self {
+    pub fn cat<T: TensorOps<V>>(inps: &[&T]) -> Result<Self, TensorError> {
         let shape = inps
             .get(0)
             .expect("No tensors to be concatenated!")
             .shape()
             .to_vec();
-        inps.iter().all(|t| t.shape() == shape);
+        if !inps.iter().all(|t| t.shape() == shape) {
+            return Err(TensorError::UnexpectedShape);
+        }
         let each_sz = inps.get(0).unwrap().size();
         let group_size = shape.last().unwrap();
         let mut offset = 0;
@@ -297,9 +273,9 @@ impl<V: TensorElement> Tensor<V> {
 
         let mut target_shape = shape.clone();
         target_shape[shape.len() - 1] = target_shape[shape.len() - 1] * inps.len();
-        Tensor::raw(&target_shape, data)
+        Ok(Tensor::raw(&target_shape, data))
     }
-    pub fn split<T: TensorOps<V>>(inp: &T, cnt: usize) -> Vec<Tensor<V>> {
+    pub fn split<T: TensorOps<V>>(inp: &T, cnt: usize) -> Result<Vec<Tensor<V>>, TensorError> {
         let group_size = inp.shape().last().unwrap() / cnt;
         let mut result = vec![Vec::<V>::new(); cnt];
         let mut offset = 0;
@@ -312,9 +288,9 @@ impl<V: TensorElement> Tensor<V> {
         }
         let mut target_shape = inp.shape().to_vec();
         target_shape[inp.dim() - 1] = target_shape[inp.dim() - 1] / cnt;
-        result
+        Ok(result
             .into_iter()
             .map(|d| Tensor::raw(&target_shape, d))
-            .collect()
+            .collect())
     }
 }

@@ -1,5 +1,9 @@
 # :robot: femtoGPT
 
+![crates.io](https://img.shields.io/crates/v/femto-gpt.svg)
+![GitHub top language](https://img.shields.io/github/languages/top/keyvank/femtoGPT)
+![GitHub](https://img.shields.io/github/license/keyvank/femtoGPT)
+
 femtoGPT is a pure Rust implementation of a minimal Generative Pretrained Transformer.
 
 Everything is implemented from scratch, including the tensor processing logic

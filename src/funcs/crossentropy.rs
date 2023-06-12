@@ -44,8 +44,8 @@ impl Loss for CrossEntropy {
             .unzip();
 
         Ok((
-            Tensor::raw(&loss_shape, loss),
-            Tensor::raw(&grad_shape, grad.into_iter().flatten().collect()),
+            Tensor::raw(&loss_shape, loss)?,
+            Tensor::raw(&grad_shape, grad.into_iter().flatten().collect())?,
         ))
     }
 }

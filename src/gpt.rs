@@ -45,8 +45,8 @@ fn sample_dataset<R: Rng>(
     }
 
     (
-        Tensor::raw(&[batch_size, context_size], xs),
-        Tensor::raw(&[batch_size, context_size], ys),
+        Tensor::raw(&[batch_size, context_size], xs).unwrap(),
+        Tensor::raw(&[batch_size, context_size], ys).unwrap(),
     )
 }
 
@@ -76,7 +76,7 @@ fn select<R: Rng, T: TensorOps<f32>>(
     t: &T,
     temperature: f32,
 ) -> Result<usize, TensorError> {
-    let t = Softmax::new().run(&[&Tensor::<f32>::raw(t.shape(), t.blob().to_vec())], false)?;
+    let t = Softmax::new().run(&[&Tensor::<f32>::raw(t.shape(), t.blob().to_vec())?], false)?;
     let mut ts = t.blob().iter().cloned().enumerate().collect::<Vec<_>>();
     ts.sort_by_key(|(_, b)| (b * 1000.) as usize);
     let dice = rng.gen_range(0.0..temperature);
@@ -279,7 +279,7 @@ impl<O: Optimizer> GPT<O> {
                             .cycle()
                             .take(self.num_tokens * 1)
                             .collect(),
-                    );
+                    )?;
                     let (xs, ys) = sample_dataset(dataset, 1, self.num_tokens, &mut rng);
                     graph.embed(self.token_input, self.token_embedding, &xs)?;
                     graph.embed(self.pos_input, self.pos_embedding, &poses)?;
@@ -357,7 +357,7 @@ impl<O: Optimizer> GPT<O> {
         let mut cnt = prompt.len();
         let mut context = vec![0; self.num_tokens];
         context[..prompt.len()].copy_from_slice(prompt);
-        let poses = Tensor::raw(&[self.num_tokens], (0..self.num_tokens).collect());
+        let poses = Tensor::raw(&[self.num_tokens], (0..self.num_tokens).collect())?;
         self.graph
             .embed(self.pos_input, self.pos_embedding, &poses)?;
         for ch in prompt {
@@ -368,7 +368,7 @@ impl<O: Optimizer> GPT<O> {
             self.graph.embed(
                 self.token_input,
                 self.token_embedding,
-                &Tensor::raw(&[self.num_tokens], context.clone()),
+                &Tensor::raw(&[self.num_tokens], context.clone())?,
             )?;
             self.graph.forward(false)?;
             let next_ch = select(rng, &self.graph.get(self.output).get(cnt - 1)?, temperature)?;

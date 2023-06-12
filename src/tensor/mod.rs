@@ -20,6 +20,68 @@ pub struct Tensor<V: TensorElement> {
     shape: Vec<usize>,
 }
 
+impl<V: TensorElement> Tensor<V> {
+    pub fn raw(shape: &[usize], blob: Vec<V>) -> Result<Self, TensorError> {
+        let sz = shape.iter().fold(1, |c, s| c * s);
+        if sz != blob.len() {
+            return Err(TensorError::UnexpectedShape);
+        }
+        Ok(Self {
+            blob,
+            shape: shape.to_vec(),
+        })
+    }
+    pub fn tril(n: usize) -> Self {
+        Tensor {
+            blob: (0..n * n)
+                .map(|i| if i % n <= i / n { V::one() } else { V::zero() })
+                .collect(),
+            shape: vec![n, n],
+        }
+    }
+    pub fn scalar(v: V) -> Self {
+        Tensor {
+            blob: vec![v],
+            shape: vec![],
+        }
+    }
+    pub fn vector(v: &[V]) -> Self {
+        Tensor {
+            blob: v.to_vec(),
+            shape: vec![v.len()],
+        }
+    }
+    pub fn constant(shape: &[usize], value: V) -> Self {
+        Tensor {
+            blob: vec![value; shape.iter().fold(1, |curr, s| curr * s)],
+            shape: shape.to_vec(),
+        }
+    }
+    pub fn zeros(shape: &[usize]) -> Self {
+        Self::constant(shape, V::zero())
+    }
+    pub fn ones(shape: &[usize]) -> Self {
+        Self::constant(shape, V::one())
+    }
+    pub fn rand_range<R: Rng>(r: &mut R, start: f32, end: f32, shape: &[usize]) -> Tensor<f32> {
+        Tensor::<f32> {
+            blob: (0..shape.iter().fold(1, |curr, s| curr * s))
+                .map(|_| r.gen_range(start..end))
+                .collect(),
+            shape: shape.to_vec(),
+        }
+    }
+    pub fn rand<R: Rng>(r: &mut R, shape: &[usize]) -> Tensor<f32> {
+        let normal = Normal::new(0.0, 0.02).unwrap();
+        Tensor::<f32> {
+            blob: (0..shape.iter().fold(1, |curr, s| curr * s))
+                .map(|_| normal.sample(r))
+                .collect(),
+            shape: shape.to_vec(),
+        }
+    }
+}
+
 impl<T: TensorOps<bool>> From<&T> for Tensor<f32> {
     fn from(v: &T) -> Self {
         v.map_values(|v| v.as_f32())
@@ -172,7 +234,10 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
                     dat.push(m_blob[i * d1 + j]);
                 }
             }
-            Ok(Tensor::raw(&[d1, d0], dat))
+            Ok(Tensor {
+                blob: dat,
+                shape: [d1, d0].to_vec(),
+            })
         })
     }
 }
@@ -199,108 +264,5 @@ impl<V: TensorElement> TensorOps<V> for Tensor<V> {
     }
     fn blob(&self) -> &[V] {
         &self.blob
-    }
-}
-
-impl<V: TensorElement> Tensor<V> {
-    pub fn raw(shape: &[usize], blob: Vec<V>) -> Self {
-        let sz = shape.iter().fold(1, |c, s| c * s);
-        assert_eq!(sz, blob.len());
-        Self {
-            blob,
-            shape: shape.to_vec(),
-        }
-    }
-    pub fn tril(n: usize) -> Self {
-        Tensor {
-            blob: (0..n * n)
-                .map(|i| if i % n <= i / n { V::one() } else { V::zero() })
-                .collect(),
-            shape: vec![n, n],
-        }
-    }
-    pub fn scalar(v: V) -> Self {
-        Tensor {
-            blob: vec![v],
-            shape: vec![],
-        }
-    }
-    pub fn vector(v: &[V]) -> Self {
-        Tensor {
-            blob: v.to_vec(),
-            shape: vec![v.len()],
-        }
-    }
-    pub fn constant(shape: &[usize], value: V) -> Self {
-        Tensor {
-            blob: vec![value; shape.iter().fold(1, |curr, s| curr * s)],
-            shape: shape.to_vec(),
-        }
-    }
-    pub fn zeros(shape: &[usize]) -> Self {
-        Self::constant(shape, V::zero())
-    }
-    pub fn ones(shape: &[usize]) -> Self {
-        Self::constant(shape, V::one())
-    }
-    pub fn rand_range<R: Rng>(r: &mut R, start: f32, end: f32, shape: &[usize]) -> Tensor<f32> {
-        Tensor::<f32> {
-            blob: (0..shape.iter().fold(1, |curr, s| curr * s))
-                .map(|_| r.gen_range(start..end))
-                .collect(),
-            shape: shape.to_vec(),
-        }
-    }
-    pub fn rand<R: Rng>(r: &mut R, shape: &[usize]) -> Tensor<f32> {
-        let normal = Normal::new(0.0, 0.02).unwrap();
-        Tensor::<f32> {
-            blob: (0..shape.iter().fold(1, |curr, s| curr * s))
-                .map(|_| normal.sample(r))
-                .collect(),
-            shape: shape.to_vec(),
-        }
-    }
-    pub fn cat<T: TensorOps<V>>(inps: &[&T]) -> Result<Self, TensorError> {
-        let shape = inps
-            .get(0)
-            .expect("No tensors to be concatenated!")
-            .shape()
-            .to_vec();
-        if !inps.iter().all(|t| t.shape() == shape) {
-            return Err(TensorError::UnexpectedShape);
-        }
-        let each_sz = inps.get(0).unwrap().size();
-        let group_size = shape.last().unwrap();
-        let mut offset = 0;
-        let mut data: Vec<V> = Vec::with_capacity(each_sz * inps.len());
-
-        while offset < each_sz {
-            for inp in inps {
-                data.extend(&inp.blob()[offset..offset + group_size]);
-            }
-            offset += group_size;
-        }
-
-        let mut target_shape = shape.clone();
-        target_shape[shape.len() - 1] = target_shape[shape.len() - 1] * inps.len();
-        Ok(Tensor::raw(&target_shape, data))
-    }
-    pub fn split<T: TensorOps<V>>(inp: &T, cnt: usize) -> Result<Vec<Tensor<V>>, TensorError> {
-        let group_size = inp.shape().last().unwrap() / cnt;
-        let mut result = vec![Vec::<V>::new(); cnt];
-        let mut offset = 0;
-        let inp_blob = inp.blob();
-        while offset < inp.size() {
-            for i in 0..cnt {
-                result[i].extend(&inp_blob[offset..offset + group_size]);
-                offset += group_size;
-            }
-        }
-        let mut target_shape = inp.shape().to_vec();
-        target_shape[inp.dim() - 1] = target_shape[inp.dim() - 1] / cnt;
-        Ok(result
-            .into_iter()
-            .map(|d| Tensor::raw(&target_shape, d))
-            .collect())
     }
 }

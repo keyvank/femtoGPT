@@ -26,7 +26,7 @@ impl Function for Mask {
                 .zip(self.mask.blob().iter())
                 .map(|(v, m)| if *m == 1. { self.value } else { *v })
                 .collect::<Vec<_>>();
-            Ok(Tensor::raw(t.shape(), dat))
+            Ok(Tensor::raw(t.shape(), dat)?)
         })
     }
     fn grad(

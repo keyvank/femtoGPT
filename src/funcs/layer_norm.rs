@@ -24,10 +24,10 @@ impl Function for LayerNorm {
                 + EPSILON)
                 .sqrt();
             let var_inv = 1. / var;
-            Ok(Tensor::raw(
+            Tensor::raw(
                 l.shape(),
                 l.blob().iter().map(|v| (v - avg) * var_inv).collect(),
-            ))
+            )
         })?;
         &(&self.norm * inps[1])? + inps[2]
     }
@@ -75,7 +75,7 @@ impl Function for LayerNorm {
             .flatten()
             .collect::<Vec<_>>();
         Ok(vec![
-            Tensor::raw(out_grad.shape(), grad_inp0),
+            Tensor::raw(out_grad.shape(), grad_inp0)?,
             (out_grad * &self.norm)?,
             out_grad.clone(),
         ])

@@ -20,14 +20,14 @@ pub fn binary<
     a.map(b.dim(), |a| {
         assert_eq!(a.shape(), b.shape());
         let (a, b) = if rev { (&b, &a) } else { (&a, &b) };
-        Ok(Tensor::raw(
+        Tensor::raw(
             a.shape(),
             a.blob()
                 .iter()
                 .zip(b.blob().iter())
                 .map(|(a, b)| f(*a, *b))
                 .collect(),
-        ))
+        )
     })
 }
 
@@ -92,7 +92,7 @@ impl<
                 .collect();
             let mut final_shape = a.shape().to_vec();
             final_shape[a.dim() - 1] = b.shape()[b.dim() - 1];
-            Ok(Tensor::raw(&final_shape, data))
+            Tensor::raw(&final_shape, data)
         })
     }
 }

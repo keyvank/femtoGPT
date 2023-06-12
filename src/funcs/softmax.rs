@@ -54,7 +54,7 @@ impl Function for Softmax {
             })
             .flatten()
             .collect::<Vec<_>>();
-        Ok(vec![Tensor::raw(out_grad.shape(), grad_inp0)])
+        Ok(vec![Tensor::raw(out_grad.shape(), grad_inp0)?])
     }
     fn clone_box(&self) -> Box<dyn Function> {
         Box::new(self.clone())

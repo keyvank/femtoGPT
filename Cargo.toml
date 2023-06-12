@@ -1,7 +1,13 @@
 [package]
 name = "femto-gpt"
 version = "0.1.0"
+authors = ["Keyvan Kambakhsh <keyvankambakhsh@gmail.com>"]
 edition = "2021"
+description = "Minimal Rust library for training GPT language-models"
+repository = "https://github.com/keyvank/femtoGPT"
+homepage = "https://github.com/keyvank/femtoGPT"
+license = "MIT"
+
 
 [dependencies]
 rand = "0.8.5"

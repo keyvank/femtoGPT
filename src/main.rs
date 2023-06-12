@@ -19,7 +19,7 @@ fn main() -> Result<(), TensorError> {
     let num_tokens = 64;
     let vocab_size = tokenizer.vocab_size();
     let embedding_degree = 64;
-    let num_layers = 4;
+    let num_layers = 12;
     let num_heads = 4;
     let head_size = embedding_degree / num_heads;
     let dropout = 0.0;
@@ -43,7 +43,11 @@ fn main() -> Result<(), TensorError> {
     println!("Number of parameters: {}", gpt.num_params());
 
     // Load training data from train_data directory (If exists)
-    gpt.load("train_data");
+    // If you want to reuse training_data of a smaller model in a bigger model, you may
+    // first start again with a new optimizer by setting load_optimizer=false
+    // WARN: YOU CAN ONLY REUSE THE WEIGHTS OF A MODEL WITH DIFFERENT NUM-LAYERS!
+    // IT'S NOT POSSIBLE TO CHANGE OTHER PROPERTIES ONCE THE MODEL IS TRAINED!
+    gpt.load("train_data", true);
 
     println!("Generating text:");
 

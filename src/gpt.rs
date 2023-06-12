@@ -104,11 +104,16 @@ impl<O: Optimizer> GPT<O> {
     ) -> Result<Self, TensorError> {
         let mut g = Graph::new();
 
-        let token_embedding = g.alloc_rand(rng, &[vocab_size, embedding_degree]);
-        let pos_embedding = g.alloc_rand(rng, &[num_tokens, embedding_degree]);
+        let token_embedding = g.alloc_rand(
+            rng,
+            &[vocab_size, embedding_degree],
+            "token_embedding".into(),
+        );
+        let pos_embedding =
+            g.alloc_rand(rng, &[num_tokens, embedding_degree], "pos_embedding".into());
 
-        let token_input = g.alloc_rand(rng, &[num_tokens, embedding_degree]);
-        let pos_input = g.alloc_rand(rng, &[num_tokens, embedding_degree]);
+        let token_input = g.alloc_rand(rng, &[num_tokens, embedding_degree], "token_input".into());
+        let pos_input = g.alloc_rand(rng, &[num_tokens, embedding_degree], "pos_input".into());
         let inp = g.call(Add::new(), &[token_input, pos_input])?;
 
         // Keep track of tensor-ids of learnable tensors!
@@ -117,20 +122,32 @@ impl<O: Optimizer> GPT<O> {
         params.extend(&[token_embedding, pos_embedding]);
 
         let mut curr_inp = inp;
-        for _ in 0..num_layers {
+        for l in 0..num_layers {
             // Normalize input before applying multi-head attention
-            let norm_coeff = g.alloc_rand(rng, &[embedding_degree]);
-            let norm_bias = g.alloc_rand(rng, &[embedding_degree]);
+            let norm_coeff = g.alloc_rand(rng, &[embedding_degree], format!("norm_{}_coeff", l));
+            let norm_bias = g.alloc_rand(rng, &[embedding_degree], format!("norm_{}_bias", l));
             params.extend(&[norm_coeff, norm_bias]);
             let norm_inp = g.call(LayerNorm::new(), &[curr_inp, norm_coeff, norm_bias])?;
 
             let mut heads = Vec::new();
 
             // Multi-head Attention
-            for _ in 0..num_heads {
-                let k_params = g.alloc_rand(rng, &[embedding_degree, head_size]);
-                let q_params = g.alloc_rand(rng, &[embedding_degree, head_size]);
-                let v_params = g.alloc_rand(rng, &[embedding_degree, head_size]);
+            for h in 0..num_heads {
+                let k_params = g.alloc_rand(
+                    rng,
+                    &[embedding_degree, head_size],
+                    format!("head_{}_{}_k", l, h),
+                );
+                let q_params = g.alloc_rand(
+                    rng,
+                    &[embedding_degree, head_size],
+                    format!("head_{}_{}_q", l, h),
+                );
+                let v_params = g.alloc_rand(
+                    rng,
+                    &[embedding_degree, head_size],
+                    format!("head_{}_{}_v", l, h),
+                );
                 params.extend(&[k_params, q_params, v_params]);
                 let k = g.call(MatMul::new(), &[norm_inp, k_params])?;
                 let q = g.call(MatMul::new(), &[norm_inp, q_params])?;
@@ -153,16 +170,23 @@ impl<O: Optimizer> GPT<O> {
 
             // Concat head results and project into embedding_degree
             let cat = g.call(Cat::new(), &heads)?;
-            let proj_params = g.alloc_rand(rng, &[num_heads * head_size, embedding_degree]);
-            let proj_bias_params = g.alloc_rand(rng, &[embedding_degree]);
+            let proj_params = g.alloc_rand(
+                rng,
+                &[num_heads * head_size, embedding_degree],
+                format!("proj_{}_weights", l),
+            );
+            let proj_bias_params =
+                g.alloc_rand(rng, &[embedding_degree], format!("proj_{}_bias", l));
             let proj_cat = g.call(MatMul::new(), &[cat, proj_params])?;
             let proj_cat_bias = g.call(Add::new(), &[proj_cat, proj_bias_params])?;
             let dropped_proj_cat_bias = g.call(Dropout::new(dropout), &[proj_cat_bias])?;
 
             // Add attention results to input and then normalize
             let add_atten = g.call(Add::new(), &[norm_inp, dropped_proj_cat_bias])?;
-            let add_atten_norm_coeff = g.alloc_rand(rng, &[embedding_degree]);
-            let add_atten_norm_bias = g.alloc_rand(rng, &[embedding_degree]);
+            let add_atten_norm_coeff =
+                g.alloc_rand(rng, &[embedding_degree], format!("atten_norm_{}_coeff", l));
+            let add_atten_norm_bias =
+                g.alloc_rand(rng, &[embedding_degree], format!("atten_norm_{}_bias", l));
             let add_atten_norm = g.call(
                 LayerNorm::new(),
                 &[add_atten, add_atten_norm_coeff, add_atten_norm_bias],
@@ -172,13 +196,26 @@ impl<O: Optimizer> GPT<O> {
             // Linear embedding_degree -> 4*embedding_degree
             // Relu
             // Linear 4*embedding_degree -> embedding_degree
-            let lin1_params = g.alloc_rand(rng, &[embedding_degree, 4 * embedding_degree]);
-            let bias1_params = g.alloc_rand(rng, &[4 * embedding_degree]);
+            let lin1_params = g.alloc_rand(
+                rng,
+                &[embedding_degree, 4 * embedding_degree],
+                format!("feedforward1_{}_weights", l),
+            );
+            let bias1_params = g.alloc_rand(
+                rng,
+                &[4 * embedding_degree],
+                format!("feedforward1_{}_bias", l),
+            );
             let lin1_result = g.call(MatMul::new(), &[add_atten_norm, lin1_params])?;
             let lin1_bias_result = g.call(Add::new(), &[lin1_result, bias1_params])?;
             let lin1_act = g.call(Relu::new(), &[lin1_bias_result])?;
-            let lin2_params = g.alloc_rand(rng, &[4 * embedding_degree, embedding_degree]);
-            let bias2_params = g.alloc_rand(rng, &[embedding_degree]);
+            let lin2_params = g.alloc_rand(
+                rng,
+                &[4 * embedding_degree, embedding_degree],
+                format!("feedforward2_{}_weights", l),
+            );
+            let bias2_params =
+                g.alloc_rand(rng, &[embedding_degree], format!("feedforward2_{}_bias", l));
             let lin2_result = g.call(MatMul::new(), &[lin1_act, lin2_params])?;
             let lin2_bias_result = g.call(Add::new(), &[lin2_result, bias2_params])?;
 
@@ -197,14 +234,18 @@ impl<O: Optimizer> GPT<O> {
         }
 
         // Normalize the output after the last layer
-        let norm_out_coeff = g.alloc_rand(rng, &[embedding_degree]);
-        let norm_out_bias = g.alloc_rand(rng, &[embedding_degree]);
+        let norm_out_coeff = g.alloc_rand(rng, &[embedding_degree], format!("head_norm_coeff"));
+        let norm_out_bias = g.alloc_rand(rng, &[embedding_degree], format!("head_norm_bias"));
         params.extend(&[norm_out_coeff, norm_out_bias]);
         let norm_out = g.call(LayerNorm::new(), &[curr_inp, norm_out_coeff, norm_out_bias])?;
 
         // Map from embedding_degree to vocab_size through a linear layer
-        let to_vocab = g.alloc_rand(rng, &[embedding_degree, vocab_size]);
-        let to_vocab_bias = g.alloc_rand(rng, &[vocab_size]);
+        let to_vocab = g.alloc_rand(
+            rng,
+            &[embedding_degree, vocab_size],
+            format!("head_map_weights"),
+        );
+        let to_vocab_bias = g.alloc_rand(rng, &[vocab_size], format!("head_map_bias"));
         let result_lin = g.call(MatMul::new(), &[norm_out, to_vocab])?;
         let output = g.call(Add::new(), &[result_lin, to_vocab_bias])?;
         params.extend(&[to_vocab, to_vocab_bias]);
@@ -230,10 +271,10 @@ impl<O: Optimizer> GPT<O> {
             .sum::<usize>()
     }
 
-    pub fn load<P: AsRef<Path>>(&mut self, dir: P) {
+    pub fn load<P: AsRef<Path>>(&mut self, dir: P, load_optimizer: bool) {
         if dir.as_ref().is_dir() {
             for p in self.params.iter() {
-                let tensor_path = dir.as_ref().join(format!("tensor_{}.dat", p));
+                let tensor_path = dir.as_ref().join(self.graph.name_of(*p));
                 if tensor_path.is_file() {
                     let mut tensor_file = File::open(tensor_path).unwrap();
                     let mut bytes = Vec::new();
@@ -242,12 +283,14 @@ impl<O: Optimizer> GPT<O> {
                     self.graph.load(*p, &t);
                 }
             }
-            let opt_path = dir.as_ref().join("optimizer.dat");
-            if opt_path.is_file() {
-                let mut opt_data = File::open(opt_path).unwrap();
-                let mut bytes = Vec::new();
-                opt_data.read_to_end(&mut bytes).unwrap();
-                self.optimizer = bincode::deserialize(&bytes).unwrap();
+            if load_optimizer {
+                let opt_path = dir.as_ref().join("optimizer.dat");
+                if opt_path.is_file() {
+                    let mut opt_data = File::open(opt_path).unwrap();
+                    let mut bytes = Vec::new();
+                    opt_data.read_to_end(&mut bytes).unwrap();
+                    self.optimizer = bincode::deserialize(&bytes).unwrap();
+                }
             }
         }
     }
@@ -256,7 +299,7 @@ impl<O: Optimizer> GPT<O> {
         fs::create_dir_all(&dir).unwrap();
         for p in self.params.iter() {
             let data = bincode::serialize(self.graph.get(*p)).unwrap();
-            fs::write(dir.as_ref().join(format!("tensor_{}.dat", p)), &data)
+            fs::write(dir.as_ref().join(self.graph.name_of(*p)), &data)
                 .expect("Unable to write file");
         }
         let opt_data = bincode::serialize(&self.optimizer).unwrap();

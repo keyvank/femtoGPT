@@ -27,6 +27,7 @@ unsafe impl Sync for Computation {}
 pub struct Graph {
     tensors: Vec<Tensor<f32>>,
     grads: Vec<Tensor<f32>>,
+    names: Vec<String>,
     computations: BTreeMap<TensorId, Computation>,
 }
 
@@ -36,14 +37,16 @@ impl Graph {
             tensors: Default::default(),
             grads: Default::default(),
             computations: Default::default(),
+            names: Default::default(),
         }
     }
-    pub fn alloc_rand<R: Rng>(&mut self, rng: &mut R, shape: &[usize]) -> TensorId {
-        self.alloc(Tensor::<f32>::rand(rng, shape))
+    pub fn alloc_rand<R: Rng>(&mut self, rng: &mut R, shape: &[usize], name: String) -> TensorId {
+        self.alloc(Tensor::<f32>::rand(rng, shape), name)
     }
-    fn alloc(&mut self, t: Tensor<f32>) -> TensorId {
+    fn alloc(&mut self, t: Tensor<f32>, name: String) -> TensorId {
         self.grads.push(Tensor::zeros(t.shape()));
         self.tensors.push(t);
+        self.names.push(name);
         self.tensors.len() - 1
     }
     pub fn load<T: TensorOps<f32>>(&mut self, tensor_id: TensorId, tensor: &T) {
@@ -81,6 +84,9 @@ impl Graph {
             *grad = (&*grad + &add.view())?;
         }
         Ok(())
+    }
+    pub fn name_of(&self, id: TensorId) -> &str {
+        self.names.get(id).expect("Tensor not found!")
     }
     pub fn get(&self, id: TensorId) -> &Tensor<f32> {
         self.tensors.get(id).expect("Tensor not found!")
@@ -135,7 +141,7 @@ impl Graph {
             .map(|id| self.tensors.get(*id).expect("Tensor not found!"))
             .collect::<Vec<_>>();
         let out = f.run(&tensors, false)?;
-        let child = self.alloc(out);
+        let child = self.alloc(out, "".into());
         self.computations.insert(
             child,
             Computation {

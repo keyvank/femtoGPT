@@ -233,18 +233,22 @@ impl<O: Optimizer> GPT<O> {
     pub fn load<P: AsRef<Path>>(&mut self, dir: P) {
         if dir.as_ref().is_dir() {
             for p in self.params.iter() {
-                let mut tensor_file =
-                    File::open(dir.as_ref().join(format!("tensor_{}.dat", p))).unwrap();
-                let mut bytes = Vec::new();
-                tensor_file.read_to_end(&mut bytes).unwrap();
-                let t: Tensor<f32> = bincode::deserialize(&bytes).unwrap();
-                self.graph.load(*p, &t);
+                let tensor_path = dir.as_ref().join(format!("tensor_{}.dat", p));
+                if tensor_path.is_file() {
+                    let mut tensor_file = File::open(tensor_path).unwrap();
+                    let mut bytes = Vec::new();
+                    tensor_file.read_to_end(&mut bytes).unwrap();
+                    let t: Tensor<f32> = bincode::deserialize(&bytes).unwrap();
+                    self.graph.load(*p, &t);
+                }
             }
-
-            let mut opt_data = File::open(dir.as_ref().join("optimizer.dat")).unwrap();
-            let mut bytes = Vec::new();
-            opt_data.read_to_end(&mut bytes).unwrap();
-            self.optimizer = bincode::deserialize(&bytes).unwrap();
+            let opt_path = dir.as_ref().join("optimizer.dat");
+            if opt_path.is_file() {
+                let mut opt_data = File::open(opt_path).unwrap();
+                let mut bytes = Vec::new();
+                opt_data.read_to_end(&mut bytes).unwrap();
+                self.optimizer = bincode::deserialize(&bytes).unwrap();
+            }
         }
     }
 

@@ -75,17 +75,24 @@ fn main() -> Result<(), TensorError> {
     let decay_steps = 50000;
 
     // Training loop!
-    gpt.train(&dataset, 100000, batch_size, |step| {
-        if step < warmup_steps {
-            (base_lr / warmup_steps as f32) * step as f32
-        } else {
-            // Fancy LR tuning, thanks to https://github.com/cutoken!
-            f32::max(
-                min_lr,
-                base_lr - (base_lr - min_lr) * (step - warmup_steps) as f32 / decay_steps as f32,
-            )
-        }
-    })?;
+    gpt.train(
+        &dataset,
+        100000,
+        batch_size,
+        None, // or Some(n), limit backward process to last n computations
+        |step| {
+            if step < warmup_steps {
+                (base_lr / warmup_steps as f32) * step as f32
+            } else {
+                // Fancy LR tuning, thanks to https://github.com/cutoken!
+                f32::max(
+                    min_lr,
+                    base_lr
+                        - (base_lr - min_lr) * (step - warmup_steps) as f32 / decay_steps as f32,
+                )
+            }
+        },
+    )?;
 
     Ok(())
 }

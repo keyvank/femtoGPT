@@ -311,6 +311,7 @@ impl<O: Optimizer> GPT<O> {
         dataset: &[usize],
         num_batches: usize,
         batch_size: usize,
+        limit: Option<usize>,
         learning_rate: F,
     ) -> Result<(), TensorError> {
         for i in 0..num_batches {
@@ -335,6 +336,7 @@ impl<O: Optimizer> GPT<O> {
                     let err = graph.backward_all(
                         self.output,
                         CrossEntropy::new(self.vocab_size, ys.clone()),
+                        limit,
                     )?;
                     let mut token_embedding_grad =
                         Tensor::<f32>::zeros(graph.get(self.token_embedding).shape());

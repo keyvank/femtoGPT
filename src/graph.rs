@@ -98,13 +98,19 @@ impl Graph {
         &mut self,
         id: TensorId,
         loss_fn: Box<dyn Loss>,
+        limit: Option<usize>,
     ) -> Result<f32, TensorError> {
         let output = self.get(id);
         let (loss, grad) = loss_fn.run(output)?;
         let mean_coeff = 1. / loss.size() as f32;
         self.add_grad(id, (&grad * &Tensor::scalar(mean_coeff))?)?;
 
-        for (id, comp) in self.computations.clone().iter().rev() {
+        for (i, (id, comp)) in self.computations.clone().iter().rev().enumerate() {
+            if let Some(limit) = limit {
+                if i >= limit {
+                    break;
+                }
+            }
             let inps = comp
                 .inps
                 .iter()

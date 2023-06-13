@@ -39,3 +39,29 @@ impl Function for Gelu {
         Box::new(self.clone())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // For calculating high-accuracy numerical derivative
+    fn gelu_f64(x: f64) -> f64 {
+        0.5 * x * ((SQRT_2_OVER_PI as f64 * (x + GELU_CONST as f64 * x.powi(3))).tanh() + 1.)
+    }
+
+    #[test]
+    fn test_derivative() {
+        const EPSILON: f64 = 1e-5;
+
+        let mut x = -5.;
+        while x < 5. {
+            let numeric = ((gelu_f64(x as f64 + EPSILON) - gelu_f64(x as f64 - EPSILON))
+                / EPSILON
+                / 2.) as f32;
+            let symbolic = gelu_prime(x);
+            let diff = numeric / symbolic;
+            x += 0.01;
+            assert!(diff > 0.99 && diff < 1.01);
+        }
+    }
+}

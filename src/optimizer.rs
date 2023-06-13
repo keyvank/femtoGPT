@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::tensor::{Tensor, TensorError, TensorOps};
 use rayon::prelude::*;
 
-pub trait Optimizer: Serialize + serde::de::DeserializeOwned {
+pub trait Optimizer: Clone + Serialize + serde::de::DeserializeOwned {
     fn step_num(&self) -> usize;
     fn step(
         &mut self,

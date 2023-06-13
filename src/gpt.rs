@@ -4,11 +4,14 @@ use crate::optimizer::Optimizer;
 use crate::tensor::{Tensor, TensorError, TensorMutOps, TensorOps};
 use rand::Rng;
 use rayon::prelude::*;
-use std::fs;
-use std::fs::*;
-use std::io::prelude::*;
-use std::path::Path;
+use serde::{Deserialize, Serialize};
 use std::time::Instant;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrainingState<O: Clone> {
+    pub tensors: HashMap<String, Tensor<f32>>,
+    pub optimizer: O,
+}
 
 pub struct GPT<O: Optimizer> {
     graph: Graph,
@@ -271,40 +274,34 @@ impl<O: Optimizer> GPT<O> {
             .sum::<usize>()
     }
 
-    pub fn load<P: AsRef<Path>>(&mut self, dir: P, load_optimizer: bool) {
-        if dir.as_ref().is_dir() {
-            for p in self.params.iter() {
-                let tensor_path = dir.as_ref().join(self.graph.name_of(*p).unwrap());
-                if tensor_path.is_file() {
-                    let mut tensor_file = File::open(tensor_path).unwrap();
-                    let mut bytes = Vec::new();
-                    tensor_file.read_to_end(&mut bytes).unwrap();
-                    let t: Tensor<f32> = bincode::deserialize(&bytes).unwrap();
-                    self.graph.load(*p, &t);
-                }
-            }
-            if load_optimizer {
-                let opt_path = dir.as_ref().join("optimizer.dat");
-                if opt_path.is_file() {
-                    let mut opt_data = File::open(opt_path).unwrap();
-                    let mut bytes = Vec::new();
-                    opt_data.read_to_end(&mut bytes).unwrap();
-                    self.optimizer = bincode::deserialize(&bytes).unwrap();
-                }
+    pub fn set_training_state(
+        &mut self,
+        training_state: TrainingState<O>,
+        load_optimizer: bool,
+    ) -> Result<(), GraphError> {
+        for p in self.params.iter() {
+            let name = self.graph.name_of(*p)?;
+            if let Some(t) = training_state.tensors.get(name) {
+                self.graph.load(*p, t);
             }
         }
+        if load_optimizer {
+            self.optimizer = training_state.optimizer;
+        }
+        Ok(())
     }
 
-    pub fn save<P: AsRef<Path>>(&self, dir: P) -> Result<(), GraphError> {
-        fs::create_dir_all(&dir).unwrap();
+    pub fn get_training_state(&self) -> Result<TrainingState<O>, GraphError> {
+        let mut state = TrainingState {
+            tensors: Default::default(),
+            optimizer: self.optimizer.clone(),
+        };
         for p in self.params.iter() {
-            let data = bincode::serialize(self.graph.get(*p)?).unwrap();
-            fs::write(dir.as_ref().join(self.graph.name_of(*p)?), &data)
-                .expect("Unable to write file");
+            let k = self.graph.name_of(*p)?.to_string();
+            let v = self.graph.get(*p)?.clone();
+            state.tensors.insert(k, v);
         }
-        let opt_data = bincode::serialize(&self.optimizer).unwrap();
-        fs::write(dir.as_ref().join("optimizer.dat"), &opt_data).expect("Unable to write file");
-        Ok(())
+        Ok(state)
     }
 
     pub fn train<F: Fn(usize) -> f32, C: Fn(&Self) -> Result<(), GraphError>>(

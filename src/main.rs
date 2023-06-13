@@ -2,9 +2,14 @@ use femto_gpt::graph::GraphError;
 
 #[cfg(not(feature = "gpu"))]
 fn main() -> Result<(), GraphError> {
-    use femto_gpt::gpt::GPT;
+    use femto_gpt::gpt::{TrainingState, GPT};
+    use femto_gpt::optimizer::AdamW;
     use femto_gpt::tokenizer::{SimpleTokenizer, Tokenizer};
     use std::fs;
+    use std::io::prelude::*;
+    use std::path::Path;
+
+    let training_state_path = Path::new("training_state.dat");
 
     let mut rng = rand::thread_rng();
 
@@ -38,7 +43,7 @@ fn main() -> Result<(), GraphError> {
         num_heads,
         head_size,
         dropout,
-        femto_gpt::optimizer::AdamW::new(),
+        AdamW::new(),
     )?;
 
     println!("Number of parameters: {}", gpt.num_params());
@@ -48,7 +53,13 @@ fn main() -> Result<(), GraphError> {
     // first start again with a new optimizer by setting load_optimizer=false
     // WARN: YOU CAN ONLY REUSE THE WEIGHTS OF A MODEL WITH DIFFERENT NUM-LAYERS!
     // IT'S NOT POSSIBLE TO CHANGE OTHER PROPERTIES ONCE THE MODEL IS TRAINED!
-    gpt.load("train_data", true);
+    if training_state_path.is_file() {
+        let mut ts_file = fs::File::open(training_state_path).unwrap();
+        let mut bytes = Vec::new();
+        ts_file.read_to_end(&mut bytes).unwrap();
+        let ts: TrainingState<AdamW> = bincode::deserialize(&bytes).unwrap();
+        gpt.set_training_state(ts, true)?;
+    }
 
     println!();
     println!("Starting the training loop... (This make take hours to converge! be patient!)");
@@ -96,7 +107,9 @@ fn main() -> Result<(), GraphError> {
             println!("{}", tokenizer.untokenize(&inference));
 
             println!("Saving the model...");
-            gpt.save("train_data").unwrap();
+            let ts = gpt.get_training_state().unwrap();
+            let bytes = bincode::serialize(&ts).unwrap();
+            fs::write(training_state_path, &bytes).expect("Unable to write file");
 
             Ok(())
         },

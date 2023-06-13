@@ -36,8 +36,8 @@ pub struct Graph {
 pub enum GraphError {
     #[error("tensor error: {0}")]
     TensorError(#[from] TensorError),
-    #[error("tensor not found")]
-    TensorNotFound,
+    #[error("tensor with id {0} not found")]
+    TensorNotFound(usize),
 }
 
 impl Graph {
@@ -84,7 +84,10 @@ impl Graph {
     }
     pub fn add_grad<T: TensorOps<f32>>(&mut self, id: TensorId, add: T) -> Result<(), GraphError> {
         let shape = self.get(id)?.shape().to_vec();
-        let grad = self.grads.get_mut(id).ok_or(GraphError::TensorNotFound)?;
+        let grad = self
+            .grads
+            .get_mut(id)
+            .ok_or(GraphError::TensorNotFound(id))?;
         if add.dim() >= shape.len() {
             for t in add.keep_right(shape.len())?.inners().iter() {
                 *grad = (&*grad + t)?;
@@ -95,13 +98,13 @@ impl Graph {
         Ok(())
     }
     pub fn name_of(&self, id: TensorId) -> Result<&String, GraphError> {
-        self.names.get(id).ok_or(GraphError::TensorNotFound)
+        self.names.get(id).ok_or(GraphError::TensorNotFound(id))
     }
     pub fn get(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError> {
-        self.tensors.get(id).ok_or(GraphError::TensorNotFound)
+        self.tensors.get(id).ok_or(GraphError::TensorNotFound(id))
     }
     pub fn get_grad(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError> {
-        self.grads.get(id).ok_or(GraphError::TensorNotFound)
+        self.grads.get(id).ok_or(GraphError::TensorNotFound(id))
     }
     pub fn backward_all(
         &mut self,
@@ -139,7 +142,7 @@ impl Graph {
             let tensors = c
                 .inps
                 .iter()
-                .map(|id| self.tensors.get(*id).ok_or(GraphError::TensorNotFound))
+                .map(|id| self.tensors.get(*id).ok_or(GraphError::TensorNotFound(*id)))
                 .collect::<Result<Vec<_>, GraphError>>()?;
             let result = c.func.run(&tensors, training)?;
             self.tensors[*out] = result;
@@ -178,7 +181,7 @@ impl Graph {
             .enumerate()
             .filter(|(id, _)| params.contains(id))
             .map(|(id, params)| {
-                let grad = self.grads.get(id).ok_or(GraphError::TensorNotFound)?;
+                let grad = self.grads.get(id).ok_or(GraphError::TensorNotFound(id))?;
                 Ok((params, grad))
             })
             .collect::<Result<Vec<_>, GraphError>>()?

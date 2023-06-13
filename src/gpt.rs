@@ -306,13 +306,14 @@ impl<O: Optimizer> GPT<O> {
         fs::write(dir.as_ref().join("optimizer.dat"), &opt_data).expect("Unable to write file");
     }
 
-    pub fn train<F: Fn(usize) -> f32>(
+    pub fn train<F: Fn(usize) -> f32, C: Fn(&Self) -> Result<(), TensorError>>(
         &mut self,
         dataset: &[usize],
         num_batches: usize,
         batch_size: usize,
         limit: Option<usize>,
         learning_rate: F,
+        callback: C,
     ) -> Result<(), TensorError> {
         for i in 0..num_batches {
             let timer = Instant::now();
@@ -382,8 +383,7 @@ impl<O: Optimizer> GPT<O> {
                 lr,
             )?;
             if i % 50 == 0 {
-                println!("Saving the model...");
-                self.save("train_data");
+                callback(self)?;
             }
             println!(
                 "Step: {} Loss: {} (Elapsed: {}ms)",
@@ -396,7 +396,7 @@ impl<O: Optimizer> GPT<O> {
     }
 
     pub fn infer<R: Rng, F: Fn(usize) -> ()>(
-        &mut self,
+        &self,
         rng: &mut R,
         prompt: &[usize],
         count: usize,
@@ -407,20 +407,22 @@ impl<O: Optimizer> GPT<O> {
         let mut context = vec![0; self.num_tokens];
         context[..prompt.len()].copy_from_slice(prompt);
         let poses = Tensor::raw(&[self.num_tokens], (0..self.num_tokens).collect())?;
-        self.graph
-            .embed(self.pos_input, self.pos_embedding, &poses)?;
+
+        let mut graph = self.graph.clone();
+
+        graph.embed(self.pos_input, self.pos_embedding, &poses)?;
         for ch in prompt {
             callback(*ch);
         }
         let mut chs = prompt.to_vec();
         for _ in 0..count {
-            self.graph.embed(
+            graph.embed(
                 self.token_input,
                 self.token_embedding,
                 &Tensor::raw(&[self.num_tokens], context.clone())?,
             )?;
-            self.graph.forward(false)?;
-            let next_ch = select(rng, &self.graph.get(self.output).get(cnt - 1)?, temperature)?;
+            graph.forward(false)?;
+            let next_ch = select(rng, &graph.get(self.output).get(cnt - 1)?, temperature)?;
             chs.push(next_ch);
             callback(next_ch);
             if cnt == self.num_tokens {

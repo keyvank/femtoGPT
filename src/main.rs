@@ -49,22 +49,6 @@ fn main() -> Result<(), TensorError> {
     // IT'S NOT POSSIBLE TO CHANGE OTHER PROPERTIES ONCE THE MODEL IS TRAINED!
     gpt.load("train_data", true);
 
-    println!("Generating text:");
-
-    let inference_temperature = 0.5; // How creative? 0.0 min 1.0 max
-
-    let inference = gpt.infer(
-        &mut rng,
-        &tokenizer.tokenize("\n"),
-        100,
-        inference_temperature,
-        |_ch| {},
-    )?;
-
-    // Generate 100 character with the currently trained model before
-    // starting the training loop.
-    println!("{}", tokenizer.untokenize(&inference));
-
     println!();
     println!("Starting the training loop... (This make take hours to converge! be patient!)");
     println!();
@@ -91,6 +75,29 @@ fn main() -> Result<(), TensorError> {
                         - (base_lr - min_lr) * (step - warmup_steps) as f32 / decay_steps as f32,
                 )
             }
+        },
+        |gpt| {
+            let mut rng = rand::thread_rng();
+            let inference_temperature = 0.5; // How creative? 0.0 min 1.0 max
+
+            println!("Generating text:");
+
+            let inference = gpt.infer(
+                &mut rng,
+                &tokenizer.tokenize("\ndef "),
+                200,
+                inference_temperature,
+                |_ch| {},
+            )?;
+
+            // Generate 100 character with the currently trained model before
+            // starting the training loop.
+            println!("{}", tokenizer.untokenize(&inference));
+
+            println!("Saving the model...");
+            gpt.save("train_data");
+
+            Ok(())
         },
     )?;
 

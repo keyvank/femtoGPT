@@ -1,10 +1,16 @@
-use femto_gpt::gpt::GPT;
 use femto_gpt::graph::GraphError;
-use femto_gpt::tokenizer::{SimpleTokenizer, Tokenizer};
 
-use std::fs;
-
+#[cfg(feature = "gpu")]
 fn main() -> Result<(), GraphError> {
+    unimplemented!();
+}
+
+#[cfg(not(feature = "gpu"))]
+fn main() -> Result<(), GraphError> {
+    use femto_gpt::gpt::GPT;
+    use femto_gpt::tokenizer::{SimpleTokenizer, Tokenizer};
+    use std::fs;
+
     let mut rng = rand::thread_rng();
 
     // Create a unique char-to-int mapping for all unique characters inside our dataset

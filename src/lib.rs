@@ -4,3 +4,6 @@ pub mod graph;
 pub mod optimizer;
 pub mod tensor;
 pub mod tokenizer;
+
+#[cfg(feature = "gpu")]
+pub mod gpu;

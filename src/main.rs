@@ -1,10 +1,10 @@
 use femto_gpt::gpt::GPT;
-use femto_gpt::tensor::TensorError;
+use femto_gpt::graph::GraphError;
 use femto_gpt::tokenizer::{SimpleTokenizer, Tokenizer};
 
 use std::fs;
 
-fn main() -> Result<(), TensorError> {
+fn main() -> Result<(), GraphError> {
     let mut rng = rand::thread_rng();
 
     // Create a unique char-to-int mapping for all unique characters inside our dataset
@@ -95,7 +95,7 @@ fn main() -> Result<(), TensorError> {
             println!("{}", tokenizer.untokenize(&inference));
 
             println!("Saving the model...");
-            gpt.save("train_data");
+            gpt.save("train_data").unwrap();
 
             Ok(())
         },

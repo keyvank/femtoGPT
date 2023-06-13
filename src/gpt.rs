@@ -1,5 +1,5 @@
 use crate::funcs::*;
-use crate::graph::{Graph, TensorId};
+use crate::graph::{Graph, GraphError, TensorId};
 use crate::optimizer::Optimizer;
 use crate::tensor::{Tensor, TensorError, TensorMutOps, TensorOps};
 use rand::Rng;
@@ -101,7 +101,7 @@ impl<O: Optimizer> GPT<O> {
         head_size: usize,
         dropout: f32,
         optimizer: O,
-    ) -> Result<Self, TensorError> {
+    ) -> Result<Self, GraphError> {
         let mut g = Graph::new();
 
         let token_embedding = g.alloc_rand(
@@ -267,14 +267,14 @@ impl<O: Optimizer> GPT<O> {
     pub fn num_params(&self) -> usize {
         self.params
             .iter()
-            .map(|p| self.graph.get(*p).size())
+            .map(|p| self.graph.get(*p).unwrap().size())
             .sum::<usize>()
     }
 
     pub fn load<P: AsRef<Path>>(&mut self, dir: P, load_optimizer: bool) {
         if dir.as_ref().is_dir() {
             for p in self.params.iter() {
-                let tensor_path = dir.as_ref().join(self.graph.name_of(*p));
+                let tensor_path = dir.as_ref().join(self.graph.name_of(*p).unwrap());
                 if tensor_path.is_file() {
                     let mut tensor_file = File::open(tensor_path).unwrap();
                     let mut bytes = Vec::new();
@@ -295,18 +295,19 @@ impl<O: Optimizer> GPT<O> {
         }
     }
 
-    pub fn save<P: AsRef<Path>>(&self, dir: P) {
+    pub fn save<P: AsRef<Path>>(&self, dir: P) -> Result<(), GraphError> {
         fs::create_dir_all(&dir).unwrap();
         for p in self.params.iter() {
-            let data = bincode::serialize(self.graph.get(*p)).unwrap();
-            fs::write(dir.as_ref().join(self.graph.name_of(*p)), &data)
+            let data = bincode::serialize(self.graph.get(*p)?).unwrap();
+            fs::write(dir.as_ref().join(self.graph.name_of(*p)?), &data)
                 .expect("Unable to write file");
         }
         let opt_data = bincode::serialize(&self.optimizer).unwrap();
         fs::write(dir.as_ref().join("optimizer.dat"), &opt_data).expect("Unable to write file");
+        Ok(())
     }
 
-    pub fn train<F: Fn(usize) -> f32, C: Fn(&Self) -> Result<(), TensorError>>(
+    pub fn train<F: Fn(usize) -> f32, C: Fn(&Self) -> Result<(), GraphError>>(
         &mut self,
         dataset: &[usize],
         num_batches: usize,
@@ -314,7 +315,7 @@ impl<O: Optimizer> GPT<O> {
         limit: Option<usize>,
         learning_rate: F,
         callback: C,
-    ) -> Result<(), TensorError> {
+    ) -> Result<(), GraphError> {
         for i in 0..num_batches {
             let timer = Instant::now();
             let (graphs, errs): (Vec<Graph>, Vec<f32>) = (0..batch_size)
@@ -340,24 +341,24 @@ impl<O: Optimizer> GPT<O> {
                         limit,
                     )?;
                     let mut token_embedding_grad =
-                        Tensor::<f32>::zeros(graph.get(self.token_embedding).shape());
+                        Tensor::<f32>::zeros(graph.get(self.token_embedding)?.shape());
                     let mut pos_embedding_grad =
-                        Tensor::<f32>::zeros(graph.get(self.pos_embedding).shape());
+                        Tensor::<f32>::zeros(graph.get(self.pos_embedding)?.shape());
                     unembed(
                         &xs,
-                        graph.get_grad(self.token_input),
+                        graph.get_grad(self.token_input)?,
                         &mut token_embedding_grad,
                     )?;
                     unembed(
                         &poses,
-                        graph.get_grad(self.pos_input),
+                        graph.get_grad(self.pos_input)?,
                         &mut pos_embedding_grad,
                     )?;
                     graph.load_grad(self.token_embedding, &token_embedding_grad);
                     graph.load_grad(self.pos_embedding, &pos_embedding_grad);
                     Ok((graph, err))
                 })
-                .collect::<Result<Vec<(Graph, f32)>, TensorError>>()?
+                .collect::<Result<Vec<(Graph, f32)>, GraphError>>()?
                 .into_iter()
                 .unzip();
             for (id, avg) in self
@@ -366,12 +367,12 @@ impl<O: Optimizer> GPT<O> {
                 .map(|id| {
                     let mut avg = Tensor::<f32>::scalar(0.);
                     for g in graphs.iter() {
-                        avg = (&avg + g.get_grad(*id))?;
+                        avg = (&avg + g.get_grad(*id)?)?;
                     }
                     avg = avg.map_values(|f| f / graphs.len() as f32);
                     Ok((id, avg))
                 })
-                .collect::<Result<Vec<_>, TensorError>>()?
+                .collect::<Result<Vec<_>, GraphError>>()?
             {
                 self.graph.load_grad(*id, &avg);
             }
@@ -402,7 +403,7 @@ impl<O: Optimizer> GPT<O> {
         count: usize,
         temperature: f32,
         callback: F,
-    ) -> Result<Vec<usize>, TensorError> {
+    ) -> Result<Vec<usize>, GraphError> {
         let mut cnt = prompt.len();
         let mut context = vec![0; self.num_tokens];
         context[..prompt.len()].copy_from_slice(prompt);
@@ -422,7 +423,7 @@ impl<O: Optimizer> GPT<O> {
                 &Tensor::raw(&[self.num_tokens], context.clone())?,
             )?;
             graph.forward(false)?;
-            let next_ch = select(rng, &graph.get(self.output).get(cnt - 1)?, temperature)?;
+            let next_ch = select(rng, &graph.get(self.output)?.get(cnt - 1)?, temperature)?;
             chs.push(next_ch);
             callback(next_ch);
             if cnt == self.num_tokens {

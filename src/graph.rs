@@ -3,6 +3,7 @@ use crate::optimizer::Optimizer;
 use crate::tensor::*;
 use rand::Rng;
 use std::collections::{BTreeMap, HashSet};
+use thiserror::Error;
 
 pub type TensorId = usize;
 
@@ -31,6 +32,14 @@ pub struct Graph {
     computations: BTreeMap<TensorId, Computation>,
 }
 
+#[derive(Error, Debug)]
+pub enum GraphError {
+    #[error("tensor error: {0}")]
+    TensorError(#[from] TensorError),
+    #[error("tensor not found")]
+    TensorNotFound,
+}
+
 impl Graph {
     pub fn new() -> Self {
         Self {
@@ -57,8 +66,8 @@ impl Graph {
         tensor_id: TensorId,
         embedding_id: TensorId,
         input: &T,
-    ) -> Result<(), TensorError> {
-        let embedding = self.get(embedding_id);
+    ) -> Result<(), GraphError> {
+        let embedding = self.get(embedding_id)?;
         self.load(
             tensor_id,
             &input.map(0, |s| Ok(embedding.get(s.scalar()?)?.into()))?,
@@ -73,9 +82,9 @@ impl Graph {
             t.fill(0.);
         });
     }
-    pub fn add_grad<T: TensorOps<f32>>(&mut self, id: TensorId, add: T) -> Result<(), TensorError> {
-        let shape = self.get(id).shape().to_vec();
-        let grad = self.grads.get_mut(id).unwrap();
+    pub fn add_grad<T: TensorOps<f32>>(&mut self, id: TensorId, add: T) -> Result<(), GraphError> {
+        let shape = self.get(id)?.shape().to_vec();
+        let grad = self.grads.get_mut(id).ok_or(GraphError::TensorNotFound)?;
         if add.dim() >= shape.len() {
             for t in add.keep_right(shape.len())?.inners().iter() {
                 *grad = (&*grad + t)?;
@@ -85,22 +94,22 @@ impl Graph {
         }
         Ok(())
     }
-    pub fn name_of(&self, id: TensorId) -> &str {
-        self.names.get(id).expect("Tensor not found!")
+    pub fn name_of(&self, id: TensorId) -> Result<&String, GraphError> {
+        self.names.get(id).ok_or(GraphError::TensorNotFound)
     }
-    pub fn get(&self, id: TensorId) -> &Tensor<f32> {
-        self.tensors.get(id).expect("Tensor not found!")
+    pub fn get(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError> {
+        self.tensors.get(id).ok_or(GraphError::TensorNotFound)
     }
-    pub fn get_grad(&self, id: TensorId) -> &Tensor<f32> {
-        self.grads.get(id).expect("Tensor not found!")
+    pub fn get_grad(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError> {
+        self.grads.get(id).ok_or(GraphError::TensorNotFound)
     }
     pub fn backward_all(
         &mut self,
         id: TensorId,
         loss_fn: Box<dyn Loss>,
         limit: Option<usize>,
-    ) -> Result<f32, TensorError> {
-        let output = self.get(id);
+    ) -> Result<f32, GraphError> {
+        let output = self.get(id)?;
         let (loss, grad) = loss_fn.run(output)?;
         let mean_coeff = 1. / loss.size() as f32;
         self.add_grad(id, (&grad * &Tensor::scalar(mean_coeff))?)?;
@@ -125,13 +134,13 @@ impl Graph {
 
         Ok(loss.mean())
     }
-    pub fn forward(&mut self, training: bool) -> Result<(), TensorError> {
+    pub fn forward(&mut self, training: bool) -> Result<(), GraphError> {
         for (out, c) in self.computations.iter_mut() {
             let tensors = c
                 .inps
                 .iter()
-                .map(|id| self.tensors.get(*id).expect("Tensor not found!"))
-                .collect::<Vec<_>>();
+                .map(|id| self.tensors.get(*id).ok_or(GraphError::TensorNotFound))
+                .collect::<Result<Vec<_>, GraphError>>()?;
             let result = c.func.run(&tensors, training)?;
             self.tensors[*out] = result;
         }
@@ -141,11 +150,11 @@ impl Graph {
         &mut self,
         mut f: Box<dyn Function>,
         tensor_ids: &[TensorId],
-    ) -> Result<TensorId, TensorError> {
+    ) -> Result<TensorId, GraphError> {
         let tensors = tensor_ids
             .iter()
-            .map(|id| self.tensors.get(*id).expect("Tensor not found!"))
-            .collect::<Vec<_>>();
+            .map(|id| self.get(*id))
+            .collect::<Result<Vec<_>, GraphError>>()?;
         let out = f.run(&tensors, false)?;
         let child = self.alloc(out, "".into());
         self.computations.insert(
@@ -162,17 +171,17 @@ impl Graph {
         opt: &mut O,
         params: &HashSet<TensorId>,
         learning_rate: f32,
-    ) -> Result<(), TensorError> {
+    ) -> Result<(), GraphError> {
         let (params, grads): (Vec<&mut Tensor<f32>>, Vec<&Tensor<f32>>) = self
             .tensors
             .iter_mut()
             .enumerate()
             .filter(|(id, _)| params.contains(id))
             .map(|(id, params)| {
-                let grad = self.grads.get(id).expect("Tensor not found!");
-                (params, grad)
+                let grad = self.grads.get(id).ok_or(GraphError::TensorNotFound)?;
+                Ok((params, grad))
             })
-            .collect::<Vec<_>>()
+            .collect::<Result<Vec<_>, GraphError>>()?
             .into_iter()
             .unzip();
         opt.step(params, grads, learning_rate)?;

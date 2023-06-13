@@ -84,7 +84,7 @@ fn main() -> Result<(), TensorError> {
 
             let inference = gpt.infer(
                 &mut rng,
-                &tokenizer.tokenize("\ndef "),
+                &tokenizer.tokenize("\n"),
                 200,
                 inference_temperature,
                 |_ch| {},

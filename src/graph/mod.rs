@@ -1,3 +1,6 @@
+#[cfg(feature = "gpu")]
+pub mod gpu;
+
 use crate::funcs::{Function, Loss};
 use crate::optimizer::Optimizer;
 use crate::tensor::*;
@@ -38,6 +41,17 @@ pub enum GraphError {
     TensorError(#[from] TensorError),
     #[error("tensor with id {0} not found")]
     TensorNotFound(usize),
+
+    #[cfg(feature = "gpu")]
+    #[error("gpu error: {0}")]
+    GpuError(#[from] gpu::program::ProgramError),
+}
+
+#[cfg(feature = "gpu")]
+impl From<ocl::Error> for GraphError {
+    fn from(error: ocl::Error) -> Self {
+        GraphError::GpuError(gpu::program::ProgramError::from(error))
+    }
 }
 
 impl Graph {

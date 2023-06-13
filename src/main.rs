@@ -1,10 +1,5 @@
 use femto_gpt::graph::GraphError;
 
-#[cfg(feature = "gpu")]
-fn main() -> Result<(), GraphError> {
-    unimplemented!();
-}
-
 #[cfg(not(feature = "gpu"))]
 fn main() -> Result<(), GraphError> {
     use femto_gpt::gpt::GPT;
@@ -107,5 +102,19 @@ fn main() -> Result<(), GraphError> {
         },
     )?;
 
+    Ok(())
+}
+
+#[cfg(feature = "gpu")]
+fn main() -> Result<(), GraphError> {
+    use femto_gpt::funcs::*;
+    use femto_gpt::graph::gpu;
+    use femto_gpt::tensor::*;
+    let mut graph = gpu::GpuGraph::new()?;
+    let a = graph.alloc(Tensor::constant(&[10, 10], 64.), "a".into())?;
+    let b = graph.alloc(Tensor::constant(&[10, 10], 36.), "b".into())?;
+    let c = graph.call(Add::new(), &[a, b])?;
+    graph.forward(false)?;
+    println!("{:?}", graph.fetch(c)?);
     Ok(())
 }

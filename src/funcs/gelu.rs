@@ -12,8 +12,9 @@ fn gelu_prime(x: f32) -> f32 {
     let x2 = x * x;
     let x3 = x2 * x;
     let v = SQRT_2_OVER_PI * x + SQRT_2_OVER_PI * GELU_CONST * x3;
+    let v_prime = SQRT_2_OVER_PI + 3. * SQRT_2_OVER_PI * GELU_CONST * x2;
     let sech_2 = 1. / v.cosh().powi(2);
-    0.5 * (1. + v.tanh() + x * (sech_2 * (SQRT_2_OVER_PI + 3. * SQRT_2_OVER_PI * GELU_CONST * x2)))
+    0.5 * (1. + v.tanh() + x * sech_2 * v_prime)
 }
 
 #[derive(Debug, Clone)]

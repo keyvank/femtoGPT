@@ -98,6 +98,8 @@ pub enum GraphError {
     TensorError(#[from] TensorError),
     #[error("tensor with id {0} not found")]
     TensorNotFound(usize),
+    #[error("graph is not ready!")]
+    NotReady,
 
     #[cfg(feature = "gpu")]
     #[error("gpu error: {0}")]

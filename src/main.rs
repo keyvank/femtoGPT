@@ -121,30 +121,20 @@ fn main() -> Result<(), GraphError> {
 }
 #[cfg(feature = "gpu")]
 fn main() -> Result<(), GraphError> {
-    use femto_gpt::gpt::GPT;
+    use femto_gpt::funcs::*;
     use femto_gpt::graph::gpu;
-    use femto_gpt::optimizer::AdamW;
+    use femto_gpt::graph::Graph;
+    use femto_gpt::tensor::*;
 
     let mut rng = rand::thread_rng();
-    let num_tokens = 32;
-    let vocab_size = 65;
-    let embedding_degree = 64;
-    let num_layers = 4;
-    let num_heads = 4;
-    let head_size = embedding_degree / num_heads;
-    let dropout = 0.0;
+    let mut graph = gpu::GpuGraph::new()?;
+    let a = graph.alloc_rand(&mut rng, &[10, 10, 10], "".into())?;
+    let b = graph.alloc_rand(&mut rng, &[10, 10], "".into())?;
+    let c = graph.call(Add::new(), &[a, b])?;
 
-    GPT::new(
-        &mut rng,
-        gpu::GpuGraph::new()?,
-        vocab_size,
-        embedding_degree,
-        num_tokens,
-        num_layers,
-        num_heads,
-        head_size,
-        dropout,
-        AdamW::new(),
-    )?;
+    graph.load(a, &Tensor::constant(&[10, 10, 10], 36.))?;
+    graph.load(b, &Tensor::constant(&[10, 10], 64.))?;
+    graph.forward(false)?;
+    println!("{:?}", graph.fetch(c)?);
     Ok(())
 }

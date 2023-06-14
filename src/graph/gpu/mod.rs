@@ -80,7 +80,7 @@ impl GpuGraph {
             .unzip();
         let out = f.run(&tensors, false)?;
         let child = self.alloc(out, "".into())?;
-        let src = f.gpu_source_code(0, &shapes);
+        let src = f.gpu_source_code(child, &shapes);
 
         self.computations.insert(
             child,

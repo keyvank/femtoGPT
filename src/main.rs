@@ -128,13 +128,24 @@ fn main() -> Result<(), GraphError> {
 
     let mut rng = rand::thread_rng();
     let mut graph = gpu::GpuGraph::new()?;
-    let a = graph.alloc_rand(&mut rng, &[10, 10, 10], "".into())?;
-    let b = graph.alloc_rand(&mut rng, &[10, 10], "".into())?;
-    let c = graph.call(Add::new(), &[a, b])?;
+    let a = graph.alloc_rand(&mut rng, &[1000, 2, 3], "".into())?;
+    let b = graph.alloc_rand(&mut rng, &[3, 4], "".into())?;
+    let c = graph.call(MatMul::new(), &[a, b])?;
+    let d = graph.call(Relu::new(), &[c])?;
+    let e = graph.call(Softmax::new(), &[d])?;
 
-    graph.load(a, &Tensor::constant(&[10, 10, 10], 36.))?;
-    graph.load(b, &Tensor::constant(&[10, 10], 64.))?;
+    let f_coeff = graph.alloc_rand(&mut rng, &[4], "".into())?;
+    let f_bias = graph.alloc_rand(&mut rng, &[4], "".into())?;
+    let f = graph.call(LayerNorm::new(), &[e, f_coeff, f_bias])?;
+
+    graph.load(a, &Tensor::constant(&[1000, 2, 3], 2.))?;
+    graph.load(b, &Tensor::constant(&[3, 4], 3.))?;
+
+    graph.load(f_coeff, &Tensor::constant(&[4], 1.))?;
+    graph.load(f_bias, &Tensor::constant(&[4], 0.))?;
+
     graph.forward(false)?;
-    println!("{:?}", graph.fetch(c)?);
+
+    println!("{:?}", graph.fetch(f)?);
     Ok(())
 }

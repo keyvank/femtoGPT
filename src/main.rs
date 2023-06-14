@@ -23,7 +23,7 @@ fn main() -> Result<(), GraphError> {
 
     let batch_size = 32;
 
-    let num_tokens = 32;
+    let num_tokens = 64;
     let vocab_size = tokenizer.vocab_size();
     let embedding_degree = 64;
     let num_layers = 4;

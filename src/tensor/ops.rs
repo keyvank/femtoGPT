@@ -18,7 +18,9 @@ pub fn binary<
         (b.view(), a.view(), true)
     };
     a.map(b.dim(), |a| {
-        assert_eq!(a.shape(), b.shape());
+        if a.shape() != b.shape() {
+            return Err(TensorError::UnexpectedShape);
+        }
         let (a, b) = if rev { (&b, &a) } else { (&a, &b) };
         Tensor::raw(
             a.shape(),
@@ -62,8 +64,13 @@ impl<
             (other.view(), self.view(), true)
         };
         a.map(b.dim(), |a| {
-            assert_eq!(a.shape()[..a.dim() - 2], b.shape()[..b.dim() - 2]);
+            if a.shape()[..a.dim() - 2] != b.shape()[..b.dim() - 2] {
+                return Err(TensorError::UnexpectedShape);
+            }
             let (a, b) = if rev { (&b, &a) } else { (&a, &b) };
+            if a.shape()[a.dim() - 1] != b.shape()[b.dim() - 2] {
+                return Err(TensorError::UnexpectedShape);
+            }
             let data = a
                 .keep_right(2)?
                 .inners()

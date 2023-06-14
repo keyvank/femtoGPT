@@ -3,6 +3,7 @@ use femto_gpt::graph::GraphError;
 #[cfg(not(feature = "gpu"))]
 fn main() -> Result<(), GraphError> {
     use femto_gpt::gpt::{TrainingState, GPT};
+    use femto_gpt::graph::CpuGraph;
     use femto_gpt::optimizer::AdamW;
     use femto_gpt::tokenizer::{SimpleTokenizer, Tokenizer};
     use std::fs;
@@ -22,7 +23,7 @@ fn main() -> Result<(), GraphError> {
 
     let batch_size = 32;
 
-    let num_tokens = 64;
+    let num_tokens = 32;
     let vocab_size = tokenizer.vocab_size();
     let embedding_degree = 64;
     let num_layers = 4;
@@ -36,6 +37,7 @@ fn main() -> Result<(), GraphError> {
 
     let mut gpt = GPT::new(
         &mut rng,
+        CpuGraph::new(),
         vocab_size,
         embedding_degree,
         num_tokens,
@@ -97,7 +99,7 @@ fn main() -> Result<(), GraphError> {
             let inference = gpt.infer(
                 &mut rng,
                 &tokenizer.tokenize("\n"),
-                200,
+                100,
                 inference_temperature,
                 |_ch| {},
             )?;
@@ -117,17 +119,32 @@ fn main() -> Result<(), GraphError> {
 
     Ok(())
 }
-
 #[cfg(feature = "gpu")]
 fn main() -> Result<(), GraphError> {
-    use femto_gpt::funcs::*;
+    use femto_gpt::gpt::GPT;
     use femto_gpt::graph::gpu;
-    use femto_gpt::tensor::*;
-    let mut graph = gpu::GpuGraph::new()?;
-    let a = graph.alloc(Tensor::constant(&[10, 10], 64.), "a".into())?;
-    let b = graph.alloc(Tensor::constant(&[10, 10], 36.), "b".into())?;
-    let c = graph.call(Add::new(), &[a, b])?;
-    graph.forward(false)?;
-    println!("{:?}", graph.fetch(c)?);
+    use femto_gpt::optimizer::AdamW;
+
+    let mut rng = rand::thread_rng();
+    let num_tokens = 32;
+    let vocab_size = 65;
+    let embedding_degree = 64;
+    let num_layers = 4;
+    let num_heads = 4;
+    let head_size = embedding_degree / num_heads;
+    let dropout = 0.0;
+
+    GPT::new(
+        &mut rng,
+        gpu::GpuGraph::new()?,
+        vocab_size,
+        embedding_degree,
+        num_tokens,
+        num_layers,
+        num_heads,
+        head_size,
+        dropout,
+        AdamW::new(),
+    )?;
     Ok(())
 }

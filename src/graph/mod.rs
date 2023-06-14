@@ -10,6 +10,63 @@ use thiserror::Error;
 
 pub type TensorId = usize;
 
+pub trait Graph {
+    fn alloc(&mut self, t: Tensor<f32>, name: String) -> Result<TensorId, GraphError>;
+    fn load<T: TensorOps<f32>>(
+        &mut self,
+        tensor_id: TensorId,
+        tensor: &T,
+    ) -> Result<(), GraphError>;
+    fn alloc_rand<R: Rng>(
+        &mut self,
+        rng: &mut R,
+        shape: &[usize],
+        name: String,
+    ) -> Result<TensorId, GraphError> {
+        self.alloc(Tensor::<f32>::rand(rng, shape), name)
+    }
+    fn embed<T: TensorOps<usize>>(
+        &mut self,
+        tensor_id: TensorId,
+        embedding_id: TensorId,
+        input: &T,
+    ) -> Result<(), GraphError> {
+        let embedding = self.get(embedding_id)?;
+        self.load(
+            tensor_id,
+            &input.map(0, |s| Ok(embedding.get(s.scalar()?)?.into()))?,
+        )?;
+        Ok(())
+    }
+    fn load_grad<T: TensorOps<f32>>(&mut self, tensor_id: TensorId, tensor: &T);
+    fn zero_grad(&mut self);
+    fn add_grad<T: TensorOps<f32>>(&mut self, id: TensorId, add: T) -> Result<(), GraphError>;
+    fn name_of(&self, id: TensorId) -> Result<&String, GraphError>;
+    fn get(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError>;
+    fn get_grad(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError>;
+    fn backward_all(
+        &mut self,
+        id: TensorId,
+        loss_fn: Box<dyn Loss>,
+        limit: Option<usize>,
+    ) -> Result<f32, GraphError>;
+    fn forward(&mut self, training: bool) -> Result<(), GraphError>;
+    fn call(
+        &mut self,
+        f: Box<dyn Function>,
+        tensor_ids: &[TensorId],
+    ) -> Result<TensorId, GraphError>;
+    fn optimize<O: Optimizer>(
+        &mut self,
+        opt: &mut O,
+        params: &HashSet<TensorId>,
+        learning_rate: f32,
+    ) -> Result<(), GraphError>;
+}
+
+unsafe impl Send for CpuGraph {}
+unsafe impl Sync for CpuGraph {}
+
 struct Computation {
     inps: Vec<TensorId>,
     func: Box<dyn Function>,
@@ -28,7 +85,7 @@ unsafe impl Send for Computation {}
 unsafe impl Sync for Computation {}
 
 #[derive(Clone)]
-pub struct Graph {
+pub struct CpuGraph {
     tensors: Vec<Tensor<f32>>,
     grads: Vec<Tensor<f32>>,
     names: Vec<String>,
@@ -54,49 +111,30 @@ impl From<ocl::Error> for GraphError {
     }
 }
 
-impl Graph {
-    pub fn new() -> Self {
-        Self {
-            tensors: Default::default(),
-            grads: Default::default(),
-            computations: Default::default(),
-            names: Default::default(),
-        }
-    }
-    pub fn alloc_rand<R: Rng>(&mut self, rng: &mut R, shape: &[usize], name: String) -> TensorId {
-        self.alloc(Tensor::<f32>::rand(rng, shape), name)
-    }
-    fn alloc(&mut self, t: Tensor<f32>, name: String) -> TensorId {
+impl Graph for CpuGraph {
+    fn alloc(&mut self, t: Tensor<f32>, name: String) -> Result<TensorId, GraphError> {
         self.grads.push(Tensor::zeros(t.shape()));
         self.tensors.push(t);
         self.names.push(name);
-        self.tensors.len() - 1
+        Ok(self.tensors.len() - 1)
     }
-    pub fn load<T: TensorOps<f32>>(&mut self, tensor_id: TensorId, tensor: &T) {
-        self.tensors[tensor_id] = tensor.view().into();
-    }
-    pub fn embed<T: TensorOps<usize>>(
+    fn load<T: TensorOps<f32>>(
         &mut self,
         tensor_id: TensorId,
-        embedding_id: TensorId,
-        input: &T,
+        tensor: &T,
     ) -> Result<(), GraphError> {
-        let embedding = self.get(embedding_id)?;
-        self.load(
-            tensor_id,
-            &input.map(0, |s| Ok(embedding.get(s.scalar()?)?.into()))?,
-        );
+        self.tensors[tensor_id] = tensor.view().into();
         Ok(())
     }
-    pub fn load_grad<T: TensorOps<f32>>(&mut self, tensor_id: TensorId, tensor: &T) {
+    fn load_grad<T: TensorOps<f32>>(&mut self, tensor_id: TensorId, tensor: &T) {
         self.grads[tensor_id] = tensor.view().into();
     }
-    pub fn zero_grad(&mut self) {
+    fn zero_grad(&mut self) {
         self.grads.iter_mut().for_each(|t| {
             t.fill(0.);
         });
     }
-    pub fn add_grad<T: TensorOps<f32>>(&mut self, id: TensorId, add: T) -> Result<(), GraphError> {
+    fn add_grad<T: TensorOps<f32>>(&mut self, id: TensorId, add: T) -> Result<(), GraphError> {
         let shape = self.get(id)?.shape().to_vec();
         let grad = self
             .grads
@@ -111,16 +149,16 @@ impl Graph {
         }
         Ok(())
     }
-    pub fn name_of(&self, id: TensorId) -> Result<&String, GraphError> {
+    fn name_of(&self, id: TensorId) -> Result<&String, GraphError> {
         self.names.get(id).ok_or(GraphError::TensorNotFound(id))
     }
-    pub fn get(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError> {
+    fn get(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError> {
         self.tensors.get(id).ok_or(GraphError::TensorNotFound(id))
     }
-    pub fn get_grad(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError> {
+    fn get_grad(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError> {
         self.grads.get(id).ok_or(GraphError::TensorNotFound(id))
     }
-    pub fn backward_all(
+    fn backward_all(
         &mut self,
         id: TensorId,
         loss_fn: Box<dyn Loss>,
@@ -151,7 +189,7 @@ impl Graph {
 
         Ok(loss.mean())
     }
-    pub fn forward(&mut self, training: bool) -> Result<(), GraphError> {
+    fn forward(&mut self, training: bool) -> Result<(), GraphError> {
         for (out, c) in self.computations.iter_mut() {
             let tensors = c
                 .inps
@@ -163,7 +201,7 @@ impl Graph {
         }
         Ok(())
     }
-    pub fn call(
+    fn call(
         &mut self,
         mut f: Box<dyn Function>,
         tensor_ids: &[TensorId],
@@ -173,7 +211,7 @@ impl Graph {
             .map(|id| self.get(*id))
             .collect::<Result<Vec<_>, GraphError>>()?;
         let out = f.run(&tensors, false)?;
-        let child = self.alloc(out, "".into());
+        let child = self.alloc(out, "".into())?;
         self.computations.insert(
             child,
             Computation {
@@ -183,7 +221,7 @@ impl Graph {
         );
         Ok(child)
     }
-    pub fn optimize<O: Optimizer>(
+    fn optimize<O: Optimizer>(
         &mut self,
         opt: &mut O,
         params: &HashSet<TensorId>,
@@ -203,5 +241,16 @@ impl Graph {
             .unzip();
         opt.step(params, grads, learning_rate)?;
         Ok(())
+    }
+}
+
+impl CpuGraph {
+    pub fn new() -> Self {
+        Self {
+            tensors: Default::default(),
+            grads: Default::default(),
+            computations: Default::default(),
+            names: Default::default(),
+        }
     }
 }

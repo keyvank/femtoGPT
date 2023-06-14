@@ -21,7 +21,9 @@ impl GpuGraph {
     pub fn new() -> Result<Self, GraphError> {
         let device = Device::by_brand(Brand::Nvidia)?[0].clone();
         let src = r#"
-            __kernel void add(__global float* out, uint sz, __global float* a, __global float* b) {
+            __kernel void add(__global float* out,
+                                uint sz, __global float* a,
+                                __global float* b) {
                 uint id = get_global_id(0);
                 if(id < sz) {
                     out[id] = a[id] + b[id];
@@ -36,43 +38,6 @@ impl GpuGraph {
             names: Default::default(),
             program,
         })
-    }
-    pub fn alloc(&mut self, t: Tensor<f32>, name: String) -> Result<TensorId, GraphError> {
-        self.grads.push(GpuTensor {
-            buffer: self.program.create_buffer::<f32>(t.size())?,
-            mirror: Tensor::zeros(t.shape()),
-            is_sync: false,
-        });
-        self.tensors.push(GpuTensor {
-            buffer: self.program.create_buffer::<f32>(t.size())?,
-            mirror: Tensor::zeros(t.shape()),
-            is_sync: false,
-        });
-        self.names.push(name);
-        let id = self.tensors.len() - 1;
-        self.load(id, &t)?;
-        Ok(id)
-    }
-    pub fn load<T: TensorOps<f32>>(
-        &mut self,
-        tensor_id: TensorId,
-        tensor: &T,
-    ) -> Result<(), GraphError> {
-        let gt = self.tensors.get_mut(tensor_id).unwrap();
-        gt.mirror = tensor.view().into();
-        gt.buffer.write_from(gt.mirror.blob())?;
-        gt.is_sync = true;
-        Ok(())
-    }
-    pub fn fetch(&mut self, tensor_id: TensorId) -> Result<&Tensor<f32>, GraphError> {
-        let gt = self.tensors.get_mut(tensor_id).unwrap();
-        if !gt.is_sync {
-            let mut read = Vec::new();
-            gt.buffer.read_into(&mut read)?;
-            gt.mirror = Tensor::raw(gt.mirror.shape(), read)?;
-            gt.is_sync = true;
-        }
-        Ok(&gt.mirror)
     }
     pub fn get(&self, id: TensorId) -> Result<&GpuTensor, GraphError> {
         self.tensors.get(id).ok_or(GraphError::TensorNotFound(id))
@@ -97,7 +62,76 @@ impl GpuGraph {
         );
         Ok(child)
     }
-    pub fn forward(&mut self, _training: bool) -> Result<(), GraphError> {
+}
+
+impl GpuGraph {
+    pub fn fetch(&mut self, tensor_id: TensorId) -> Result<&Tensor<f32>, GraphError> {
+        let gt = self.tensors.get_mut(tensor_id).unwrap();
+        if !gt.is_sync {
+            let mut read = Vec::new();
+            gt.buffer.read_into(&mut read)?;
+            gt.mirror = Tensor::raw(gt.mirror.shape(), read)?;
+            gt.is_sync = true;
+        }
+        Ok(&gt.mirror)
+    }
+}
+
+impl Graph for GpuGraph {
+    fn alloc(&mut self, t: Tensor<f32>, name: String) -> Result<TensorId, GraphError> {
+        self.grads.push(GpuTensor {
+            buffer: self.program.create_buffer::<f32>(t.size())?,
+            mirror: Tensor::zeros(t.shape()),
+            is_sync: false,
+        });
+        self.tensors.push(GpuTensor {
+            buffer: self.program.create_buffer::<f32>(t.size())?,
+            mirror: Tensor::zeros(t.shape()),
+            is_sync: false,
+        });
+        self.names.push(name);
+        let id = self.tensors.len() - 1;
+        self.load(id, &t)?;
+        Ok(id)
+    }
+    fn load<T: TensorOps<f32>>(
+        &mut self,
+        tensor_id: TensorId,
+        tensor: &T,
+    ) -> Result<(), GraphError> {
+        let gt = self.tensors.get_mut(tensor_id).unwrap();
+        gt.mirror = tensor.view().into();
+        gt.buffer.write_from(gt.mirror.blob())?;
+        gt.is_sync = true;
+        Ok(())
+    }
+    fn load_grad<T: TensorOps<f32>>(&mut self, _tensor_id: TensorId, _tensor: &T) {
+        unimplemented!();
+    }
+    fn zero_grad(&mut self) {
+        unimplemented!();
+    }
+    fn add_grad<T: TensorOps<f32>>(&mut self, _id: TensorId, _add: T) -> Result<(), GraphError> {
+        unimplemented!();
+    }
+    fn name_of(&self, _id: TensorId) -> Result<&String, GraphError> {
+        unimplemented!();
+    }
+    fn get(&self, _id: TensorId) -> Result<&Tensor<f32>, GraphError> {
+        unimplemented!();
+    }
+    fn get_grad(&self, _id: TensorId) -> Result<&Tensor<f32>, GraphError> {
+        unimplemented!();
+    }
+    fn backward_all(
+        &mut self,
+        _id: TensorId,
+        _loss_fn: Box<dyn Loss>,
+        _limit: Option<usize>,
+    ) -> Result<f32, GraphError> {
+        unimplemented!();
+    }
+    fn forward(&mut self, _training: bool) -> Result<(), GraphError> {
         for (out, c) in self.computations.iter_mut() {
             let inps = c
                 .inps
@@ -124,5 +158,20 @@ impl GpuGraph {
             kern.run()?;
         }
         Ok(())
+    }
+    fn call(
+        &mut self,
+        _f: Box<dyn Function>,
+        _tensor_ids: &[TensorId],
+    ) -> Result<TensorId, GraphError> {
+        unimplemented!();
+    }
+    fn optimize<O: Optimizer>(
+        &mut self,
+        _opt: &mut O,
+        _params: &HashSet<TensorId>,
+        _learning_rate: f32,
+    ) -> Result<(), GraphError> {
+        unimplemented!();
     }
 }

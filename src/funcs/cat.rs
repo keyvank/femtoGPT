@@ -10,7 +10,15 @@ impl Cat {
 }
 
 impl Function for Cat {
-    fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Result<Tensor<f32>, TensorError> {
+    fn run(
+        &mut self,
+        inps: &[&GeneralTensor],
+        _training: bool,
+    ) -> Result<Tensor<f32>, TensorError> {
+        let inps = inps
+            .iter()
+            .map(|t| t.as_float())
+            .collect::<Result<Vec<_>, TensorError>>()?;
         let first_input = inps.get(0).ok_or(TensorError::UnexpectedShape)?; // TODO: Better error?
         let shape = first_input.shape().to_vec();
         if !inps.iter().all(|t| t.shape() == shape) {
@@ -22,7 +30,7 @@ impl Function for Cat {
         let mut data = Vec::with_capacity(each_sz * inps.len());
 
         while offset < each_sz {
-            for inp in inps {
+            for inp in inps.iter() {
                 data.extend(&inp.blob()[offset..offset + group_size]);
             }
             offset += group_size;
@@ -34,9 +42,13 @@ impl Function for Cat {
     }
     fn grad(
         &self,
-        inps: &[&Tensor<f32>],
+        inps: &[&GeneralTensor],
         out_grad: &Tensor<f32>,
     ) -> Result<Vec<Tensor<f32>>, TensorError> {
+        let inps = inps
+            .iter()
+            .map(|t| t.as_float())
+            .collect::<Result<Vec<_>, TensorError>>()?;
         let cnt = inps.len();
         let last_dim = *out_grad
             .shape()

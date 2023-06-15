@@ -37,10 +37,10 @@ use super::tensor::*;
 
 pub trait Function: std::fmt::Debug {
     fn clone_box(&self) -> Box<dyn Function>;
-    fn run(&mut self, inps: &[&Tensor<f32>], training: bool) -> Result<Tensor<f32>, TensorError>;
+    fn run(&mut self, inps: &[&GeneralTensor], training: bool) -> Result<Tensor<f32>, TensorError>;
     fn grad(
         &self,
-        inps: &[&Tensor<f32>],
+        inps: &[&GeneralTensor],
         out_grad: &Tensor<f32>,
     ) -> Result<Vec<Tensor<f32>>, TensorError>;
 
@@ -56,5 +56,5 @@ pub trait Function: std::fmt::Debug {
 }
 
 pub trait Loss: std::fmt::Debug {
-    fn run(&self, inp: &Tensor<f32>) -> Result<(Tensor<f32>, Tensor<f32>), TensorError>;
+    fn run(&self, inp: &GeneralTensor) -> Result<(Tensor<f32>, Tensor<f32>), TensorError>;
 }

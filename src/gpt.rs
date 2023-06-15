@@ -1,7 +1,7 @@
 use crate::funcs::*;
 use crate::graph::{Graph, GraphError, TensorId};
 use crate::optimizer::Optimizer;
-use crate::tensor::{Tensor, TensorError, TensorMutOps, TensorOps};
+use crate::tensor::{GeneralTensor, Tensor, TensorError, TensorMutOps, TensorOps};
 use rand::Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -79,7 +79,13 @@ fn select<R: Rng, T: TensorOps<f32>>(
     t: &T,
     temperature: f32,
 ) -> Result<usize, TensorError> {
-    let t = Softmax::new().run(&[&Tensor::<f32>::raw(t.shape(), t.blob().to_vec())?], false)?;
+    let t = Softmax::new().run(
+        &[&GeneralTensor::Float(Tensor::<f32>::raw(
+            t.shape(),
+            t.blob().to_vec(),
+        )?)],
+        false,
+    )?;
     let mut ts = t.blob().iter().cloned().enumerate().collect::<Vec<_>>();
     ts.sort_by_key(|(_, b)| (b * 1000.) as usize);
     let dice = rng.gen_range(0.0..temperature);
@@ -270,7 +276,7 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
     pub fn num_params(&self) -> usize {
         self.params
             .iter()
-            .map(|p| self.graph.get(*p).unwrap().size())
+            .map(|p| self.graph.get(*p).unwrap().as_float().unwrap().size())
             .sum::<usize>()
     }
 
@@ -298,7 +304,7 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
         };
         for p in self.params.iter() {
             let k = self.graph.name_of(*p)?.to_string();
-            let v = self.graph.get(*p)?.clone();
+            let v = self.graph.get(*p)?.as_float()?.clone();
             state.tensors.insert(k, v);
         }
         Ok(state)
@@ -341,9 +347,9 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
                         limit,
                     )?;
                     let mut token_embedding_grad =
-                        Tensor::<f32>::zeros(graph.get(self.token_embedding)?.shape());
+                        Tensor::<f32>::zeros(graph.get(self.token_embedding)?.as_float()?.shape());
                     let mut pos_embedding_grad =
-                        Tensor::<f32>::zeros(graph.get(self.pos_embedding)?.shape());
+                        Tensor::<f32>::zeros(graph.get(self.pos_embedding)?.as_float()?.shape());
                     unembed(
                         &xs,
                         graph.get_grad(self.token_input)?,
@@ -426,7 +432,11 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
                 &Tensor::raw(&[self.num_tokens], context.clone())?,
             )?;
             graph.forward(false)?;
-            let next_ch = select(rng, &graph.get(self.output)?.get(cnt - 1)?, temperature)?;
+            let next_ch = select(
+                rng,
+                &graph.get(self.output)?.as_float()?.get(cnt - 1)?,
+                temperature,
+            )?;
             chs.push(next_ch);
             callback(next_ch);
             if cnt == self.num_tokens {

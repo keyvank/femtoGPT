@@ -16,7 +16,15 @@ impl Softmax {
     }
 }
 impl Function for Softmax {
-    fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Result<Tensor<f32>, TensorError> {
+    fn run(
+        &mut self,
+        inps: &[&GeneralTensor],
+        _training: bool,
+    ) -> Result<Tensor<f32>, TensorError> {
+        let inps = inps
+            .iter()
+            .map(|t| t.as_float())
+            .collect::<Result<Vec<_>, TensorError>>()?;
         self.out = inps[0].map(1, |l| {
             let max = l
                 .blob()
@@ -30,7 +38,7 @@ impl Function for Softmax {
     }
     fn grad(
         &self,
-        _inps: &[&Tensor<f32>],
+        _inps: &[&GeneralTensor],
         out_grad: &Tensor<f32>,
     ) -> Result<Vec<Tensor<f32>>, TensorError> {
         let grad_inp0 = self

@@ -2,7 +2,7 @@ use super::Function;
 use crate::tensor::*;
 
 #[cfg(feature = "gpu")]
-use super::{gpu, GpuFunction, TensorId};
+use super::{gpu, GpuFunction, GpuFunctionGroup, TensorId};
 
 #[derive(Debug, Clone)]
 pub struct Softmax {
@@ -66,5 +66,10 @@ impl Function for Softmax {
     #[cfg(feature = "gpu")]
     fn gpu_run(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
         gpu::softmax::gpu_run(out_id, inps)
+    }
+
+    #[cfg(feature = "gpu")]
+    fn gpu_grad(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
+        gpu::softmax::gpu_grad(out_id, inps)
     }
 }

@@ -354,8 +354,8 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
                         graph.get_grad(self.pos_input)?,
                         &mut pos_embedding_grad,
                     )?;
-                    graph.load_grad(self.token_embedding, &token_embedding_grad);
-                    graph.load_grad(self.pos_embedding, &pos_embedding_grad);
+                    graph.load_grad(self.token_embedding, &token_embedding_grad)?;
+                    graph.load_grad(self.pos_embedding, &pos_embedding_grad)?;
                     Ok((graph, err))
                 })
                 .collect::<Result<Vec<(G, f32)>, GraphError>>()?
@@ -374,7 +374,7 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
                 })
                 .collect::<Result<Vec<_>, GraphError>>()?
             {
-                self.graph.load_grad(*id, &avg);
+                self.graph.load_grad(*id, &avg)?;
             }
             let avg_loss = errs.iter().sum::<f32>() / errs.len() as f32;
             let lr = learning_rate(self.optimizer.step_num());

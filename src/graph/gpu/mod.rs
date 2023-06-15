@@ -1,7 +1,7 @@
 pub mod program;
 use super::*;
-use crate::funcs::GpuFunction;
-use program::{Brand, Buffer, Device, Program};
+use crate::funcs::{GpuFunction, GpuFunctionGroup};
+use program::{Brand, Buffer, Device, Program, ProgramError};
 
 pub struct GpuTensor {
     mirror: Tensor<f32>, // Mirror of GPU on CPU
@@ -9,9 +9,11 @@ pub struct GpuTensor {
     is_sync: bool,
 }
 
+#[derive(Clone)]
 pub struct GpuComputation {
     computation: Computation,
-    gpu_function: GpuFunction,
+    forward: GpuFunction,
+    backward: GpuFunctionGroup,
 }
 
 pub struct CompiledGraph {
@@ -48,7 +50,10 @@ impl GpuGraph {
         }
         let mut src = String::new();
         for comp in self.computations.values() {
-            src = src + &comp.gpu_function.source_code;
+            src = src + &comp.forward.source_code;
+            for func in comp.backward.funcs.iter() {
+                src = src + &func.source_code;
+            }
         }
         let prog = Program::from_opencl(&self.device, &src)?;
         for (v, g) in self.tensors.iter_mut().zip(self.grads.iter_mut()) {
@@ -80,7 +85,8 @@ impl GpuGraph {
             .unzip();
         let out = f.run(&tensors, false)?;
         let child = self.alloc(out, "".into())?;
-        let src = f.gpu_source_code(child, &shapes);
+        let forward = f.gpu_run(child, &shapes);
+        let backward = f.gpu_grad(child, &shapes);
 
         self.computations.insert(
             child,
@@ -89,7 +95,8 @@ impl GpuGraph {
                     func: f,
                     inps: tensor_ids.to_vec(),
                 },
-                gpu_function: src,
+                forward,
+                backward,
             },
         );
         self.program = None; // Needs recompile
@@ -100,6 +107,19 @@ impl GpuGraph {
 impl GpuGraph {
     pub fn fetch(&mut self, tensor_id: TensorId) -> Result<&Tensor<f32>, GraphError> {
         let gt = self.tensors.get_mut(tensor_id).unwrap();
+        if !gt.is_sync {
+            let mut read = vec![0.; gt.mirror.size()];
+            gt.buffer
+                .as_ref()
+                .ok_or(GraphError::NotReady)?
+                .read_into(&mut read)?;
+            gt.mirror = Tensor::raw(gt.mirror.shape(), read)?;
+            gt.is_sync = true;
+        }
+        Ok(&gt.mirror)
+    }
+    pub fn fetch_grad(&mut self, tensor_id: TensorId) -> Result<&Tensor<f32>, GraphError> {
+        let gt = self.grads.get_mut(tensor_id).unwrap();
         if !gt.is_sync {
             let mut read = vec![0.; gt.mirror.size()];
             gt.buffer
@@ -144,13 +164,22 @@ impl Graph for GpuGraph {
         gt.is_sync = true;
         Ok(())
     }
-    fn load_grad<T: TensorOps<f32>>(&mut self, _tensor_id: TensorId, _tensor: &T) {
-        unimplemented!();
+    fn load_grad<T: TensorOps<f32>>(
+        &mut self,
+        tensor_id: TensorId,
+        tensor: &T,
+    ) -> Result<(), GraphError> {
+        self.compile()?;
+        let gt = self.grads.get_mut(tensor_id).unwrap();
+        gt.mirror = tensor.view().into();
+        gt.buffer
+            .as_mut()
+            .ok_or(GraphError::NotReady)?
+            .write_from(gt.mirror.blob())?;
+        gt.is_sync = true;
+        Ok(())
     }
     fn zero_grad(&mut self) {
-        unimplemented!();
-    }
-    fn add_grad<T: TensorOps<f32>>(&mut self, _id: TensorId, _add: T) -> Result<(), GraphError> {
         unimplemented!();
     }
     fn name_of(&self, _id: TensorId) -> Result<&String, GraphError> {
@@ -164,16 +193,81 @@ impl Graph for GpuGraph {
     }
     fn backward_all(
         &mut self,
-        _id: TensorId,
+        id: TensorId,
         _loss_fn: Box<dyn Loss>,
         _limit: Option<usize>,
     ) -> Result<f32, GraphError> {
-        unimplemented!();
+        self.compile()?;
+
+        let output_shape = self.get(id)?.mirror.shape().to_vec();
+        self.load_grad(id, &Tensor::ones(&output_shape))?;
+
+        let program = self.program.as_mut().ok_or(GraphError::NotReady)?;
+
+        for (id, c) in self.computations.clone().iter().rev() {
+            let inps = c
+                .computation
+                .inps
+                .iter()
+                .map(|id| {
+                    self.tensors[*id]
+                        .buffer
+                        .as_ref()
+                        .ok_or(GraphError::NotReady)
+                })
+                .collect::<Result<Vec<_>, GraphError>>()?;
+            let inp_grads = c
+                .computation
+                .inps
+                .iter()
+                .map(|id| self.grads[*id].buffer.as_ref().ok_or(GraphError::NotReady))
+                .collect::<Result<Vec<_>, GraphError>>()?;
+            let out = self.tensors[*id]
+                .buffer
+                .as_ref()
+                .ok_or(GraphError::NotReady)?;
+            let out_grad = self.grads[*id]
+                .buffer
+                .as_ref()
+                .ok_or(GraphError::NotReady)?;
+            let buffs = c
+                .backward
+                .shared_buffers
+                .iter()
+                .map(|sz| program.program.create_buffer::<f32>(*sz))
+                .collect::<Result<Vec<_>, ProgramError>>()?;
+
+            for k in c.backward.funcs.iter() {
+                let mut kern = program.program.create_kernel(
+                    &k.kernel_name,
+                    k.global_work_size,
+                    k.local_work_size,
+                );
+                kern = kern.arg(out);
+                kern = kern.arg(out_grad);
+                for buff in buffs.iter() {
+                    kern = kern.arg(buff);
+                }
+                for (inp, grad) in inps.iter().cloned().zip(inp_grads.iter().cloned()) {
+                    kern = kern.arg(inp);
+                    kern = kern.arg(grad);
+                }
+                kern.run()?;
+            }
+
+            for inp in c.computation.inps.iter() {
+                self.grads.get_mut(*inp).unwrap().is_sync = false;
+            }
+        }
+
+        /*Ok(loss.mean())*/
+        //unimplemented!();
+        Ok(0.)
     }
     fn forward(&mut self, _training: bool) -> Result<(), GraphError> {
         self.compile()?;
         let program = self.program.as_mut().ok_or(GraphError::NotReady)?;
-        for (out, c) in self.computations.iter_mut() {
+        for (out, c) in self.computations.iter() {
             let inps = c
                 .computation
                 .inps
@@ -186,9 +280,9 @@ impl Graph for GpuGraph {
                 .ok_or(GraphError::TensorNotFound(*out))?;
 
             let mut kern = program.program.create_kernel(
-                &c.gpu_function.kernel_name,
-                c.gpu_function.global_work_size,
-                c.gpu_function.local_work_size,
+                &c.forward.kernel_name,
+                c.forward.global_work_size,
+                c.forward.local_work_size,
             );
             kern = kern.arg(out_tensor.buffer.as_ref().ok_or(GraphError::NotReady)?);
             for inp in inps.iter() {

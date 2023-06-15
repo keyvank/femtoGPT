@@ -128,24 +128,45 @@ fn main() -> Result<(), GraphError> {
 
     let mut rng = rand::thread_rng();
     let mut graph = gpu::GpuGraph::new()?;
-    let a = graph.alloc_rand(&mut rng, &[1000, 2, 3], "".into())?;
+    let a = graph.alloc_rand(&mut rng, &[10, 2, 3], "".into())?;
     let b = graph.alloc_rand(&mut rng, &[3, 4], "".into())?;
+
     let c = graph.call(MatMul::new(), &[a, b])?;
-    let d = graph.call(Relu::new(), &[c])?;
+    /*let d = graph.call(Relu::new(), &[c])?;
     let e = graph.call(Softmax::new(), &[d])?;
 
     let f_coeff = graph.alloc_rand(&mut rng, &[4], "".into())?;
     let f_bias = graph.alloc_rand(&mut rng, &[4], "".into())?;
     let f = graph.call(LayerNorm::new(), &[e, f_coeff, f_bias])?;
 
-    graph.load(a, &Tensor::constant(&[1000, 2, 3], 2.))?;
-    graph.load(b, &Tensor::constant(&[3, 4], 3.))?;
+
 
     graph.load(f_coeff, &Tensor::constant(&[4], 1.))?;
-    graph.load(f_bias, &Tensor::constant(&[4], 0.))?;
+    graph.load(f_bias, &Tensor::constant(&[4], 0.))?;*/
 
+    let a_val = Tensor::<f32>::rand(&mut rng, &[10, 2, 3]);
+    let b_val = Tensor::<f32>::rand(&mut rng, &[3, 4]);
+    let out_val = (&a_val ^ &b_val)?;
+
+    let out_grad = Tensor::ones(out_val.shape());
+    let _a_grad = (&out_grad ^ &b_val.transpose()?)?;
+    let b_grad = (&a_val.transpose()? ^ &out_grad)?;
+
+    graph.load(a, &a_val)?;
+    graph.load(b, &b_val)?;
     graph.forward(false)?;
 
-    println!("{:?}", graph.fetch(f)?);
+    graph.backward_all(
+        c,
+        CrossEntropy::new(4, Tensor::<usize>::zeros(&[10, 2])),
+        Some(10),
+    )?;
+
+    println!("{:?}", graph.fetch_grad(b)?);
+    let mut res = Tensor::zeros(&[3, 4]);
+    for t in b_grad.keep_right(2)?.inners().iter() {
+        res = (&res + t)?;
+    }
+    println!("{:?}", res);
     Ok(())
 }

@@ -38,9 +38,12 @@ pub trait Graph {
         )?;
         Ok(())
     }
-    fn load_grad<T: TensorOps<f32>>(&mut self, tensor_id: TensorId, tensor: &T);
+    fn load_grad<T: TensorOps<f32>>(
+        &mut self,
+        tensor_id: TensorId,
+        tensor: &T,
+    ) -> Result<(), GraphError>;
     fn zero_grad(&mut self);
-    fn add_grad<T: TensorOps<f32>>(&mut self, id: TensorId, add: T) -> Result<(), GraphError>;
     fn name_of(&self, id: TensorId) -> Result<&String, GraphError>;
     fn get(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError>;
     fn get_grad(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError>;
@@ -113,29 +116,7 @@ impl From<ocl::Error> for GraphError {
     }
 }
 
-impl Graph for CpuGraph {
-    fn alloc(&mut self, t: Tensor<f32>, name: String) -> Result<TensorId, GraphError> {
-        self.grads.push(Tensor::zeros(t.shape()));
-        self.tensors.push(t);
-        self.names.push(name);
-        Ok(self.tensors.len() - 1)
-    }
-    fn load<T: TensorOps<f32>>(
-        &mut self,
-        tensor_id: TensorId,
-        tensor: &T,
-    ) -> Result<(), GraphError> {
-        self.tensors[tensor_id] = tensor.view().into();
-        Ok(())
-    }
-    fn load_grad<T: TensorOps<f32>>(&mut self, tensor_id: TensorId, tensor: &T) {
-        self.grads[tensor_id] = tensor.view().into();
-    }
-    fn zero_grad(&mut self) {
-        self.grads.iter_mut().for_each(|t| {
-            t.fill(0.);
-        });
-    }
+impl CpuGraph {
     fn add_grad<T: TensorOps<f32>>(&mut self, id: TensorId, add: T) -> Result<(), GraphError> {
         let shape = self.get(id)?.shape().to_vec();
         let grad = self
@@ -151,6 +132,37 @@ impl Graph for CpuGraph {
         }
         Ok(())
     }
+}
+
+impl Graph for CpuGraph {
+    fn alloc(&mut self, t: Tensor<f32>, name: String) -> Result<TensorId, GraphError> {
+        self.grads.push(Tensor::zeros(t.shape()));
+        self.tensors.push(t);
+        self.names.push(name);
+        Ok(self.tensors.len() - 1)
+    }
+    fn load<T: TensorOps<f32>>(
+        &mut self,
+        tensor_id: TensorId,
+        tensor: &T,
+    ) -> Result<(), GraphError> {
+        self.tensors[tensor_id] = tensor.view().into();
+        Ok(())
+    }
+    fn load_grad<T: TensorOps<f32>>(
+        &mut self,
+        tensor_id: TensorId,
+        tensor: &T,
+    ) -> Result<(), GraphError> {
+        self.grads[tensor_id] = tensor.view().into();
+        Ok(())
+    }
+    fn zero_grad(&mut self) {
+        self.grads.iter_mut().for_each(|t| {
+            t.fill(0.);
+        });
+    }
+
     fn name_of(&self, id: TensorId) -> Result<&String, GraphError> {
         self.names.get(id).ok_or(GraphError::TensorNotFound(id))
     }

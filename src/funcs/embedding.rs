@@ -23,10 +23,20 @@ impl Function for Embedding {
     }
     fn grad(
         &self,
-        _inps: &[&GeneralTensor],
-        _out_grad: &Tensor<f32>,
+        inps: &[&GeneralTensor],
+        out_grad: &Tensor<f32>,
     ) -> Result<Vec<Tensor<f32>>, TensorError> {
-        Ok(vec![Tensor::scalar(0.), Tensor::scalar(0.)])
+        let inp = inps[0].as_usize()?;
+        let mut grad = Tensor::<f32>::zeros(inps[1].as_float()?.shape());
+        for (ch, embed) in inp
+            .blob()
+            .iter()
+            .zip(out_grad.keep_right(1)?.inners().iter())
+        {
+            let mut row = grad.get_mut(*ch)?;
+            row.set((&row.view() + embed)?)?;
+        }
+        Ok(vec![Tensor::scalar(0.), grad])
     }
     fn clone_box(&self) -> Box<dyn Function> {
         Box::new(self.clone())

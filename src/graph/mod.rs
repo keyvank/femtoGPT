@@ -17,19 +17,11 @@ pub trait Graph {
         tensor_id: TensorId,
         tensor: &T,
     ) -> Result<(), GraphError>;
-    fn embed<T: TensorOps<usize>>(
+    fn load_usize<T: TensorOps<usize>>(
         &mut self,
         tensor_id: TensorId,
-        embedding_id: TensorId,
-        input: &T,
-    ) -> Result<(), GraphError> {
-        let embedding = self.get(embedding_id)?.as_float()?;
-        self.load(
-            tensor_id,
-            &input.map(0, |s| Ok(embedding.get(s.scalar()?)?.into()))?,
-        )?;
-        Ok(())
-    }
+        tensor: &T,
+    ) -> Result<(), GraphError>;
     fn load_grad<T: TensorOps<f32>>(
         &mut self,
         tensor_id: TensorId,
@@ -110,6 +102,11 @@ impl From<ocl::Error> for GraphError {
 
 impl CpuGraph {
     fn add_grad<T: TensorOps<f32>>(&mut self, id: TensorId, add: T) -> Result<(), GraphError> {
+        // Usize tensors do not have gradient
+        if self.get(id)?.as_float().is_err() {
+            return Ok(());
+        }
+
         let shape = self.get(id)?.as_float()?.shape().to_vec();
         let grad = self
             .grads
@@ -145,6 +142,14 @@ impl Graph for CpuGraph {
         tensor: &T,
     ) -> Result<(), GraphError> {
         self.tensors[tensor_id] = GeneralTensor::Float(tensor.view().into());
+        Ok(())
+    }
+    fn load_usize<T: TensorOps<usize>>(
+        &mut self,
+        tensor_id: TensorId,
+        tensor: &T,
+    ) -> Result<(), GraphError> {
+        self.tensors[tensor_id] = GeneralTensor::Usize(tensor.view().into());
         Ok(())
     }
     fn load_grad<T: TensorOps<f32>>(

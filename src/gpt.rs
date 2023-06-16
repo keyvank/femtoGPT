@@ -1,10 +1,11 @@
 use crate::funcs::*;
 use crate::graph::{Graph, GraphError, TensorId};
 use crate::optimizer::Optimizer;
-use crate::tensor::{GeneralTensor, Tensor, TensorError, TensorMutOps, TensorOps};
+use crate::tensor::{GeneralTensor, Tensor, TensorError, TensorOps};
 use rand::Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::time::Instant;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,7 +19,6 @@ pub struct GPT<G: Graph, O: Optimizer> {
     vocab_size: usize,
     num_tokens: usize,
     params: Vec<TensorId>,
-    token_embedding: TensorId,
     token_input: TensorId,
     pos_input: TensorId,
     output: TensorId,
@@ -51,27 +51,6 @@ fn sample_dataset<R: Rng>(
         Tensor::raw(&[batch_size, context_size], xs).unwrap(),
         Tensor::raw(&[batch_size, context_size], ys).unwrap(),
     )
-}
-
-use std::collections::HashMap;
-fn unembed(
-    s: &Tensor<usize>,
-    s_result: &Tensor<f32>,
-    embedding: &mut Tensor<f32>,
-) -> Result<(), TensorError> {
-    let mut embeds: HashMap<usize, Vec<Tensor<f32>>> = HashMap::new();
-    for (ch, embed) in s.blob().iter().zip(s_result.keep_right(1)?.inners().iter()) {
-        embeds.entry(*ch).or_default().push(embed.clone().into());
-    }
-    for (ch, vals) in embeds {
-        let mut avg = Tensor::scalar(0.);
-        for v in vals.iter() {
-            avg = (&avg + v)?;
-        }
-        avg = (&avg * &Tensor::scalar(1. / vals.len() as f32))?;
-        embedding.get_mut(ch)?.set(avg.clone())?;
-    }
-    Ok(())
 }
 
 fn select<R: Rng, T: TensorOps<f32>>(
@@ -139,15 +118,16 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
             Tensor::<f32>::rand(rng, &[vocab_size, embedding_degree]),
             "token_embedding".into(),
         )?;
-        let token_input = g.alloc(
-            Tensor::<f32>::rand(rng, &[num_tokens, embedding_degree]),
-            "token_input".into(),
-        )?;
+        let token_input =
+            g.alloc_usize(Tensor::<usize>::zeros(&[num_tokens]), "token_input".into())?;
+
+        let embedded_token_input = g.call(Embedding::new(), &[token_input, token_embedding])?;
+
         let pos_input = g.alloc(
             Tensor::<f32>::rand(rng, &[num_tokens, embedding_degree]),
             "pos_input".into(),
         )?;
-        let inp = g.call(Add::new(), &[token_input, pos_input])?;
+        let inp = g.call(Add::new(), &[embedded_token_input, pos_input])?;
 
         // Keep track of tensor-ids of learnable tensors!
         let mut params: Vec<TensorId> = Vec::new();
@@ -306,7 +286,6 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
             token_input,
             pos_input,
             output,
-            token_embedding,
             optimizer,
             pos_input_fixed: pos_encode_inter(num_tokens, embedding_degree),
         })
@@ -371,7 +350,8 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
                     let mut rng = rand::thread_rng();
                     let mut graph = self.graph.clone();
                     let (xs, ys) = sample_dataset(dataset, 1, self.num_tokens, &mut rng);
-                    graph.embed(self.token_input, self.token_embedding, &xs)?;
+
+                    graph.load_usize(self.token_input, &xs)?;
 
                     graph.forward(true)?;
                     graph.zero_grad();
@@ -380,14 +360,6 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
                         CrossEntropy::new(self.vocab_size, ys.clone()),
                         limit,
                     )?;
-                    let mut token_embedding_grad =
-                        Tensor::<f32>::zeros(graph.get(self.token_embedding)?.as_float()?.shape());
-                    unembed(
-                        &xs,
-                        graph.get_grad(self.token_input)?,
-                        &mut token_embedding_grad,
-                    )?;
-                    graph.load_grad(self.token_embedding, &token_embedding_grad)?;
                     Ok((graph, err))
                 })
                 .collect::<Result<Vec<(G, f32)>, GraphError>>()?
@@ -451,9 +423,8 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
         }
         let mut chs = prompt.to_vec();
         for _ in 0..count {
-            graph.embed(
+            graph.load_usize(
                 self.token_input,
-                self.token_embedding,
                 &Tensor::raw(&[self.num_tokens], context.clone())?,
             )?;
             graph.forward(false)?;

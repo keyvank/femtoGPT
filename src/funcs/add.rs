@@ -12,12 +12,16 @@ impl Add {
     }
 }
 impl Function for Add {
-    fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Result<Tensor<f32>, TensorError> {
-        inps[0] + inps[1]
+    fn run(
+        &mut self,
+        inps: &[&GeneralTensor],
+        _training: bool,
+    ) -> Result<Tensor<f32>, TensorError> {
+        inps[0].as_float()? + inps[1].as_float()?
     }
     fn grad(
         &self,
-        _inps: &[&Tensor<f32>],
+        _inps: &[&GeneralTensor],
         out_grad: &Tensor<f32>,
     ) -> Result<Vec<Tensor<f32>>, TensorError> {
         Ok(vec![out_grad.clone(), out_grad.clone()])

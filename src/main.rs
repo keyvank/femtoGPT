@@ -132,8 +132,9 @@ fn main() -> Result<(), GraphError> {
     let b = graph.alloc_rand(&mut rng, &[3, 4], "".into())?;
 
     let c = graph.call(MatMul::new(), &[a, b])?;
-    /*let d = graph.call(Relu::new(), &[c])?;
-    let e = graph.call(Softmax::new(), &[d])?;
+    let d = graph.call(Softmax::new(), &[c])?;
+    /*let e = graph.call(Relu::new(), &[d])?;
+
 
     let f_coeff = graph.alloc_rand(&mut rng, &[4], "".into())?;
     let f_bias = graph.alloc_rand(&mut rng, &[4], "".into())?;
@@ -157,7 +158,7 @@ fn main() -> Result<(), GraphError> {
     graph.forward(false)?;
 
     graph.backward_all(
-        c,
+        d,
         CrossEntropy::new(4, Tensor::<usize>::zeros(&[10, 2])),
         Some(10),
     )?;

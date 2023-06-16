@@ -19,7 +19,15 @@ impl LayerNorm {
 const EPSILON: f32 = 1e-5;
 
 impl Function for LayerNorm {
-    fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Result<Tensor<f32>, TensorError> {
+    fn run(
+        &mut self,
+        inps: &[&GeneralTensor],
+        _training: bool,
+    ) -> Result<Tensor<f32>, TensorError> {
+        let inps = inps
+            .iter()
+            .map(|t| t.as_float())
+            .collect::<Result<Vec<_>, TensorError>>()?;
         self.norm = inps[0].map(1, |l| {
             let size_inv = 1. / l.size() as f32;
             let avg = l.blob().iter().sum::<f32>() * size_inv;
@@ -36,9 +44,13 @@ impl Function for LayerNorm {
     }
     fn grad(
         &self,
-        inps: &[&Tensor<f32>],
+        inps: &[&GeneralTensor],
         out_grad: &Tensor<f32>,
     ) -> Result<Vec<Tensor<f32>>, TensorError> {
+        let inps = inps
+            .iter()
+            .map(|t| t.as_float())
+            .collect::<Result<Vec<_>, TensorError>>()?;
         let grad_inp0 = inps[0]
             .keep_right(1)?
             .inners()

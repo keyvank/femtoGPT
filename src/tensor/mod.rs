@@ -20,6 +20,39 @@ pub struct Tensor<V: TensorElement> {
     shape: Vec<usize>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum GeneralTensor {
+    Float(Tensor<f32>),
+    Usize(Tensor<usize>),
+}
+
+impl GeneralTensor {
+    pub fn as_float(&self) -> Result<&Tensor<f32>, TensorError> {
+        match self {
+            GeneralTensor::Float(t) => Ok(t),
+            _ => Err(TensorError::UnexpectedType),
+        }
+    }
+    pub fn as_usize(&self) -> Result<&Tensor<usize>, TensorError> {
+        match self {
+            GeneralTensor::Usize(t) => Ok(t),
+            _ => Err(TensorError::UnexpectedType),
+        }
+    }
+    pub fn as_float_mut(&mut self) -> Result<&mut Tensor<f32>, TensorError> {
+        match self {
+            GeneralTensor::Float(t) => Ok(t),
+            _ => Err(TensorError::UnexpectedType),
+        }
+    }
+    pub fn as_usize_mut(&mut self) -> Result<&mut Tensor<usize>, TensorError> {
+        match self {
+            GeneralTensor::Usize(t) => Ok(t),
+            _ => Err(TensorError::UnexpectedType),
+        }
+    }
+}
+
 impl<V: TensorElement> Tensor<V> {
     pub fn raw(shape: &[usize], blob: Vec<V>) -> Result<Self, TensorError> {
         let sz = shape.iter().fold(1, |c, s| c * s);

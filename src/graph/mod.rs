@@ -12,6 +12,7 @@ pub type TensorId = usize;
 
 pub trait Graph {
     fn alloc(&mut self, t: Tensor<f32>, name: String) -> Result<TensorId, GraphError>;
+    fn alloc_usize(&mut self, t: Tensor<usize>, name: String) -> Result<TensorId, GraphError>;
     fn load<T: TensorOps<f32>>(
         &mut self,
         tensor_id: TensorId,
@@ -31,7 +32,7 @@ pub trait Graph {
         embedding_id: TensorId,
         input: &T,
     ) -> Result<(), GraphError> {
-        let embedding = self.get(embedding_id)?;
+        let embedding = self.get(embedding_id)?.as_float()?;
         self.load(
             tensor_id,
             &input.map(0, |s| Ok(embedding.get(s.scalar()?)?.into()))?,
@@ -45,7 +46,7 @@ pub trait Graph {
     ) -> Result<(), GraphError>;
     fn zero_grad(&mut self);
     fn name_of(&self, id: TensorId) -> Result<&String, GraphError>;
-    fn get(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError>;
+    fn get(&self, id: TensorId) -> Result<&GeneralTensor, GraphError>;
     fn get_grad(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError>;
     fn backward_all(
         &mut self,
@@ -89,7 +90,7 @@ unsafe impl Sync for Computation {}
 
 #[derive(Clone)]
 pub struct CpuGraph {
-    tensors: Vec<Tensor<f32>>,
+    tensors: Vec<GeneralTensor>,
     grads: Vec<Tensor<f32>>,
     names: Vec<String>,
     computations: BTreeMap<TensorId, Computation>,
@@ -118,7 +119,7 @@ impl From<ocl::Error> for GraphError {
 
 impl CpuGraph {
     fn add_grad<T: TensorOps<f32>>(&mut self, id: TensorId, add: T) -> Result<(), GraphError> {
-        let shape = self.get(id)?.shape().to_vec();
+        let shape = self.get(id)?.as_float()?.shape().to_vec();
         let grad = self
             .grads
             .get_mut(id)
@@ -135,9 +136,15 @@ impl CpuGraph {
 }
 
 impl Graph for CpuGraph {
+    fn alloc_usize(&mut self, t: Tensor<usize>, name: String) -> Result<TensorId, GraphError> {
+        self.grads.push(Tensor::zeros(t.shape()));
+        self.tensors.push(GeneralTensor::Usize(t));
+        self.names.push(name);
+        Ok(self.tensors.len() - 1)
+    }
     fn alloc(&mut self, t: Tensor<f32>, name: String) -> Result<TensorId, GraphError> {
         self.grads.push(Tensor::zeros(t.shape()));
-        self.tensors.push(t);
+        self.tensors.push(GeneralTensor::Float(t));
         self.names.push(name);
         Ok(self.tensors.len() - 1)
     }
@@ -146,7 +153,7 @@ impl Graph for CpuGraph {
         tensor_id: TensorId,
         tensor: &T,
     ) -> Result<(), GraphError> {
-        self.tensors[tensor_id] = tensor.view().into();
+        self.tensors[tensor_id] = GeneralTensor::Float(tensor.view().into());
         Ok(())
     }
     fn load_grad<T: TensorOps<f32>>(
@@ -166,7 +173,7 @@ impl Graph for CpuGraph {
     fn name_of(&self, id: TensorId) -> Result<&String, GraphError> {
         self.names.get(id).ok_or(GraphError::TensorNotFound(id))
     }
-    fn get(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError> {
+    fn get(&self, id: TensorId) -> Result<&GeneralTensor, GraphError> {
         self.tensors.get(id).ok_or(GraphError::TensorNotFound(id))
     }
     fn get_grad(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError> {
@@ -211,7 +218,7 @@ impl Graph for CpuGraph {
                 .map(|id| self.tensors.get(*id).ok_or(GraphError::TensorNotFound(*id)))
                 .collect::<Result<Vec<_>, GraphError>>()?;
             let result = c.func.run(&tensors, training)?;
-            self.tensors[*out] = result;
+            self.tensors[*out] = GeneralTensor::Float(result);
         }
         Ok(())
     }
@@ -248,7 +255,7 @@ impl Graph for CpuGraph {
             .filter(|(id, _)| params.contains(id))
             .map(|(id, params)| {
                 let grad = self.grads.get(id).ok_or(GraphError::TensorNotFound(id))?;
-                Ok((params, grad))
+                Ok((params.as_float_mut()?, grad))
             })
             .collect::<Result<Vec<_>, GraphError>>()?
             .into_iter()

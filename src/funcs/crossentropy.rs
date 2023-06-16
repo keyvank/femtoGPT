@@ -13,7 +13,8 @@ impl CrossEntropy {
 }
 
 impl Loss for CrossEntropy {
-    fn run(&self, inp: &Tensor<f32>) -> Result<(Tensor<f32>, Tensor<f32>), TensorError> {
+    fn run(&self, inp: &GeneralTensor) -> Result<(Tensor<f32>, Tensor<f32>), TensorError> {
+        let inp = inp.as_float()?;
         let grad_shape = inp.shape().to_vec();
         let mut loss_shape = grad_shape.clone();
         loss_shape.pop();

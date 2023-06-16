@@ -18,7 +18,15 @@ impl Mask {
 }
 
 impl Function for Mask {
-    fn run(&mut self, inps: &[&Tensor<f32>], _training: bool) -> Result<Tensor<f32>, TensorError> {
+    fn run(
+        &mut self,
+        inps: &[&GeneralTensor],
+        _training: bool,
+    ) -> Result<Tensor<f32>, TensorError> {
+        let inps = inps
+            .iter()
+            .map(|t| t.as_float())
+            .collect::<Result<Vec<_>, TensorError>>()?;
         inps[0].map(self.mask.dim(), |t| {
             let dat = t
                 .blob()
@@ -31,7 +39,7 @@ impl Function for Mask {
     }
     fn grad(
         &self,
-        _inps: &[&Tensor<f32>],
+        _inps: &[&GeneralTensor],
         out_grad: &Tensor<f32>,
     ) -> Result<Vec<Tensor<f32>>, TensorError> {
         Ok(vec![(out_grad * &self.mask_rev)?])

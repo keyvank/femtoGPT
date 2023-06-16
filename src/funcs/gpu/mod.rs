@@ -1,4 +1,5 @@
 pub mod add;
+pub mod embedding;
 pub mod layer_norm;
 pub mod matmul;
 pub mod relu;

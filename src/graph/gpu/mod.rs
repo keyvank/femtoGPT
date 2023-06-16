@@ -4,7 +4,7 @@ use crate::funcs::{GpuFunction, GpuFunctionGroup};
 use program::{Brand, Buffer, Device, Program, ProgramError};
 
 pub struct GpuTensor {
-    mirror: Tensor<f32>, // Mirror of GPU on CPU
+    mirror: GeneralTensor, // Mirror of GPU on CPU
     buffer: Option<Buffer<f32>>,
     is_sync: bool,
 }
@@ -105,15 +105,27 @@ impl GpuGraph {
 }
 
 impl GpuGraph {
-    pub fn fetch(&mut self, tensor_id: TensorId) -> Result<&Tensor<f32>, GraphError> {
+    pub fn fetch(&mut self, tensor_id: TensorId) -> Result<&GeneralTensor, GraphError> {
         let gt = self.tensors.get_mut(tensor_id).unwrap();
         if !gt.is_sync {
-            let mut read = vec![0.; gt.mirror.size()];
-            gt.buffer
-                .as_ref()
-                .ok_or(GraphError::NotReady)?
-                .read_into(&mut read)?;
-            gt.mirror = Tensor::raw(gt.mirror.shape(), read)?;
+            match gt.mirror {
+                GeneralTensor::Float(mirror) => {
+                    let mut read = vec![0.; gt.mirror.size()];
+                    gt.buffer
+                        .as_ref()
+                        .ok_or(GraphError::NotReady)?
+                        .read_into(&mut read)?;
+                    gt.mirror = GeneralTensor::Float(Tensor::raw(mirror.shape(), read)?);
+                }
+                GeneralTensor::Usize(mirror) => {
+                    let mut read = vec![0; gt.mirror.size()];
+                    gt.buffer
+                        .as_ref()
+                        .ok_or(GraphError::NotReady)?
+                        .read_into(&mut read)?;
+                    gt.mirror = GeneralTensor::Usize(Tensor::raw(mirror.shape(), read)?);
+                }
+            }
             gt.is_sync = true;
         }
         Ok(&gt.mirror)
@@ -121,15 +133,15 @@ impl GpuGraph {
     pub fn fetch_grad(&mut self, tensor_id: TensorId) -> Result<&Tensor<f32>, GraphError> {
         let gt = self.grads.get_mut(tensor_id).unwrap();
         if !gt.is_sync {
-            let mut read = vec![0.; gt.mirror.size()];
+            let mut read = vec![0.; gt.mirror.as_float()?.size()];
             gt.buffer
                 .as_ref()
                 .ok_or(GraphError::NotReady)?
                 .read_into(&mut read)?;
-            gt.mirror = Tensor::raw(gt.mirror.shape(), read)?;
+            gt.mirror = GeneralTensor::Float(Tensor::raw(gt.mirror.as_float()?.shape(), read)?);
             gt.is_sync = true;
         }
-        Ok(&gt.mirror)
+        Ok(gt.mirror.as_float()?)
     }
 }
 
@@ -137,12 +149,12 @@ impl Graph for GpuGraph {
     fn alloc(&mut self, t: Tensor<f32>, name: String) -> Result<TensorId, GraphError> {
         self.grads.push(GpuTensor {
             buffer: None,
-            mirror: Tensor::zeros(t.shape()),
+            mirror: GeneralTensor::Float(Tensor::zeros(t.shape())),
             is_sync: false,
         });
         self.tensors.push(GpuTensor {
             buffer: None,
-            mirror: t,
+            mirror: GeneralTensor::Float(t),
             is_sync: false,
         });
         self.names.push(name);
@@ -156,11 +168,11 @@ impl Graph for GpuGraph {
     ) -> Result<(), GraphError> {
         self.compile()?;
         let gt = self.tensors.get_mut(tensor_id).unwrap();
-        gt.mirror = tensor.view().into();
+        gt.mirror = GeneralTensor::Float(tensor.view().into());
         gt.buffer
             .as_mut()
             .ok_or(GraphError::NotReady)?
-            .write_from(gt.mirror.blob())?;
+            .write_from(gt.mirror.as_float()?.blob())?;
         gt.is_sync = true;
         Ok(())
     }
@@ -171,11 +183,11 @@ impl Graph for GpuGraph {
     ) -> Result<(), GraphError> {
         self.compile()?;
         let gt = self.grads.get_mut(tensor_id).unwrap();
-        gt.mirror = tensor.view().into();
+        gt.mirror = GeneralTensor::Float(tensor.view().into());
         gt.buffer
             .as_mut()
             .ok_or(GraphError::NotReady)?
-            .write_from(gt.mirror.blob())?;
+            .write_from(gt.mirror.as_float()?.blob())?;
         gt.is_sync = true;
         Ok(())
     }
@@ -185,7 +197,7 @@ impl Graph for GpuGraph {
     fn name_of(&self, _id: TensorId) -> Result<&String, GraphError> {
         unimplemented!();
     }
-    fn get(&self, _id: TensorId) -> Result<&Tensor<f32>, GraphError> {
+    fn get(&self, _id: TensorId) -> Result<&GeneralTensor, GraphError> {
         unimplemented!();
     }
     fn get_grad(&self, _id: TensorId) -> Result<&Tensor<f32>, GraphError> {
@@ -199,7 +211,7 @@ impl Graph for GpuGraph {
     ) -> Result<f32, GraphError> {
         self.compile()?;
 
-        let output_shape = self.get(id)?.mirror.shape().to_vec();
+        let output_shape = self.get(id)?.mirror.as_float()?.shape().to_vec();
         self.load_grad(id, &Tensor::ones(&output_shape))?;
 
         let program = self.program.as_mut().ok_or(GraphError::NotReady)?;

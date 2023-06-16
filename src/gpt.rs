@@ -19,12 +19,11 @@ pub struct GPT<G: Graph, O: Optimizer> {
     num_tokens: usize,
     params: Vec<TensorId>,
     token_embedding: TensorId,
-    pos_embedding: TensorId,
     token_input: TensorId,
     pos_input: TensorId,
     output: TensorId,
     optimizer: O,
-    pos_embeddings_fixed: Tensor<f32>
+    pos_input_fixed: Tensor<f32>,
 }
 
 fn sample_dataset<R: Rng>(
@@ -100,7 +99,7 @@ fn select<R: Rng, T: TensorOps<f32>>(
     panic!();
 }
 
-fn pos_encode_inter(num_tokens: usize, embedding_size: usize) -> Tensor<f32> {//-> Tensor<f32> {
+fn pos_encode_inter(num_tokens: usize, embedding_size: usize) -> Tensor<f32> {
     let mut raw_new = Vec::new();
     let cols = embedding_size;
     let rows = num_tokens;
@@ -141,9 +140,6 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
             &[vocab_size, embedding_degree],
             "token_embedding".into(),
         )?;
-        let pos_embedding =
-            g.alloc_rand(rng, &[num_tokens, embedding_degree], "pos_embedding".into())?;
-
         let token_input =
             g.alloc_rand(rng, &[num_tokens, embedding_degree], "token_input".into())?;
         let pos_input = g.alloc_rand(rng, &[num_tokens, embedding_degree], "pos_input".into())?;
@@ -152,7 +148,7 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
         // Keep track of tensor-ids of learnable tensors!
         let mut params: Vec<TensorId> = Vec::new();
 
-        params.extend(&[token_embedding, pos_embedding]);
+        params.extend(&[token_embedding]);
 
         let mut curr_inp = inp;
         for l in 0..num_layers {
@@ -292,9 +288,8 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
             pos_input,
             output,
             token_embedding,
-            pos_embedding,
             optimizer,
-            pos_embeddings_fixed: pos_encode_inter(num_tokens, embedding_degree)
+            pos_input_fixed: pos_encode_inter(num_tokens, embedding_degree),
         })
     }
 
@@ -347,10 +342,7 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
     where
         G: Clone + Send + Sync,
     {
-        self.graph.load(
-            self.pos_embedding,
-            &self.pos_embeddings_fixed,
-        );
+        self.graph.load(self.pos_input, &self.pos_input_fixed)?;
 
         for i in 0..num_batches {
             let timer = Instant::now();
@@ -361,10 +353,7 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
                     let mut graph = self.graph.clone();
                     let (xs, ys) = sample_dataset(dataset, 1, self.num_tokens, &mut rng);
                     graph.embed(self.token_input, self.token_embedding, &xs)?;
-                    graph.load(
-                        self.pos_input,
-                        &self.pos_embeddings_fixed,
-                    );
+
                     graph.forward(true)?;
                     graph.zero_grad();
                     let err = graph.backward_all(
@@ -374,15 +363,12 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
                     )?;
                     let mut token_embedding_grad =
                         Tensor::<f32>::zeros(graph.get(self.token_embedding)?.as_float()?.shape());
-                    let mut pos_embedding_grad =
-                        Tensor::<f32>::zeros(graph.get(self.pos_embedding)?.as_float()?.shape());
                     unembed(
                         &xs,
                         graph.get_grad(self.token_input)?,
                         &mut token_embedding_grad,
                     )?;
                     graph.load_grad(self.token_embedding, &token_embedding_grad)?;
-                    graph.load_grad(self.pos_embedding, &pos_embedding_grad)?;
                     Ok((graph, err))
                 })
                 .collect::<Result<Vec<(G, f32)>, GraphError>>()?
@@ -439,10 +425,8 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
         context[..prompt.len()].copy_from_slice(prompt);
         let mut graph = self.graph.clone();
 
-        graph.load(
-            self.pos_input,
-            &self.pos_embeddings_fixed//embed(&poses, &self.graph.get(self.pos_embedding)),
-        );
+        graph.load(self.pos_input, &self.pos_input_fixed)?;
+
         for ch in prompt {
             callback(*ch);
         }

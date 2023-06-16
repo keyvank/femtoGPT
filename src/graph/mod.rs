@@ -4,7 +4,6 @@ pub mod gpu;
 use crate::funcs::{Function, Loss};
 use crate::optimizer::Optimizer;
 use crate::tensor::*;
-use rand::Rng;
 use std::collections::{BTreeMap, HashSet};
 use thiserror::Error;
 
@@ -18,14 +17,6 @@ pub trait Graph {
         tensor_id: TensorId,
         tensor: &T,
     ) -> Result<(), GraphError>;
-    fn alloc_rand<R: Rng>(
-        &mut self,
-        rng: &mut R,
-        shape: &[usize],
-        name: String,
-    ) -> Result<TensorId, GraphError> {
-        self.alloc(Tensor::<f32>::rand(rng, shape), name)
-    }
     fn embed<T: TensorOps<usize>>(
         &mut self,
         tensor_id: TensorId,

@@ -24,6 +24,7 @@ pub struct GPT<G: Graph, O: Optimizer> {
     pos_input: TensorId,
     output: TensorId,
     optimizer: O,
+    pos_embeddings_fixed: Tensor<f32>
 }
 
 fn sample_dataset<R: Rng>(
@@ -91,6 +92,29 @@ fn select<R: Rng, T: TensorOps<f32>>(
         }
     }
     panic!();
+}
+
+fn pos_encode_inter(num_tokens: usize, embedding_size: usize) -> Tensor<f32> {//-> Tensor<f32> {
+    let mut raw_new = Vec::new();
+    let cols = embedding_size;
+    let rows = num_tokens;
+    for row in 0..rows {
+        for col in 0..cols {
+            let k = row as f32;
+            let i = (col / 2) as f32;
+            let factor = 10000f32.powf(2f32 * i / embedding_size as f32);
+
+            let pos = if col % 2 == 0 {
+                (k / factor).sin()
+            } else {
+                (k / factor).cos()
+            };
+
+            raw_new.push(pos);
+        }
+    }
+
+    Tensor::raw(&[rows, cols], raw_new).unwrap()
 }
 
 impl<G: Graph, O: Optimizer> GPT<G, O> {
@@ -264,6 +288,7 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
             token_embedding,
             pos_embedding,
             optimizer,
+            pos_embeddings_fixed: pos_encode_inter(num_tokens, embedding_degree)
         })
     }
 
@@ -316,6 +341,11 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
     where
         G: Clone + Send + Sync,
     {
+        self.graph.load(
+            self.pos_embedding,
+            &self.pos_embeddings_fixed,
+        );
+
         for i in 0..num_batches {
             let timer = Instant::now();
             let (graphs, errs): (Vec<G>, Vec<f32>) = (0..batch_size)
@@ -323,16 +353,12 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
                 .map(|_| {
                     let mut rng = rand::thread_rng();
                     let mut graph = self.graph.clone();
-                    let poses = Tensor::raw(
-                        &[self.num_tokens],
-                        (0..self.num_tokens)
-                            .cycle()
-                            .take(self.num_tokens * 1)
-                            .collect(),
-                    )?;
                     let (xs, ys) = sample_dataset(dataset, 1, self.num_tokens, &mut rng);
                     graph.embed(self.token_input, self.token_embedding, &xs)?;
-                    graph.embed(self.pos_input, self.pos_embedding, &poses)?;
+                    graph.load(
+                        self.pos_input,
+                        &self.pos_embeddings_fixed,
+                    );
                     graph.forward(true)?;
                     graph.zero_grad();
                     let err = graph.backward_all(
@@ -348,11 +374,6 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
                         &xs,
                         graph.get_grad(self.token_input)?,
                         &mut token_embedding_grad,
-                    )?;
-                    unembed(
-                        &poses,
-                        graph.get_grad(self.pos_input)?,
-                        &mut pos_embedding_grad,
                     )?;
                     graph.load_grad(self.token_embedding, &token_embedding_grad)?;
                     graph.load_grad(self.pos_embedding, &pos_embedding_grad)?;
@@ -410,11 +431,12 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
         let mut cnt = prompt.len();
         let mut context = vec![0; self.num_tokens];
         context[..prompt.len()].copy_from_slice(prompt);
-        let poses = Tensor::raw(&[self.num_tokens], (0..self.num_tokens).collect())?;
-
         let mut graph = self.graph.clone();
 
-        graph.embed(self.pos_input, self.pos_embedding, &poses)?;
+        graph.load(
+            self.pos_input,
+            &self.pos_embeddings_fixed//embed(&poses, &self.graph.get(self.pos_embedding)),
+        );
         for ch in prompt {
             callback(*ch);
         }

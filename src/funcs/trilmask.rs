@@ -1,6 +1,9 @@
 use super::Function;
 use crate::tensor::*;
 
+#[cfg(feature = "gpu")]
+use super::{gpu, GpuFunction, GpuFunctionGroup, TensorId};
+
 #[derive(Debug, Clone)]
 pub struct TrilMask {
     n: usize,
@@ -51,5 +54,15 @@ impl Function for TrilMask {
     }
     fn clone_box(&self) -> Box<dyn Function> {
         Box::new(self.clone())
+    }
+
+    #[cfg(feature = "gpu")]
+    fn gpu_run(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
+        gpu::trilmask::gpu_run(out_id, inps, self.n, self.value)
+    }
+
+    #[cfg(feature = "gpu")]
+    fn gpu_grad(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
+        gpu::trilmask::gpu_grad(out_id, inps, self.n)
     }
 }

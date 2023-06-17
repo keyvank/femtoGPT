@@ -134,11 +134,13 @@ fn pass_graph<G: Graph>(
     n_coeff: &Tensor<f32>,
     n_bias: &Tensor<f32>,
     added: &Tensor<f32>,
+    to22_val: &Tensor<f32>,
 ) -> Result<Vec<Tensor<f32>>, GraphError> {
     use femto_gpt::funcs::*;
 
     let a = g.alloc(Tensor::zeros(&[10, 2, 3]), "".into())?;
     let b = g.alloc(Tensor::zeros(&[3, 4]), "".into())?;
+    let to22 = g.alloc(Tensor::zeros(&[4, 2]), "".into())?;
     let n_coeff_t = g.alloc(Tensor::zeros(&[4]), "".into())?;
     let n_bias_t = g.alloc(Tensor::zeros(&[4]), "".into())?;
     let added_t = g.alloc(Tensor::zeros(&[4]), "".into())?;
@@ -148,21 +150,25 @@ fn pass_graph<G: Graph>(
     let f = g.call(Relu::new(), &[e])?;
     let h = g.call(Add::new(), &[f, added_t])?;
     let i = g.call(Coeff::new(2.), &[h])?;
+    let j = g.call(MatMul::new(), &[i, to22])?;
 
     g.load(a, a_val)?;
     g.load(b, b_val)?;
     g.load(n_coeff_t, n_coeff)?;
     g.load(n_bias_t, n_bias)?;
     g.load(added_t, added)?;
+    g.load(to22, to22_val)?;
     g.forward(false)?;
     g.zero_grad()?;
     g.backward_all(
-        i,
-        CrossEntropy::new(4, Tensor::<usize>::zeros(&[10, 2])),
+        j,
+        CrossEntropy::new(2, Tensor::<usize>::zeros(&[10, 2])),
         Some(10),
     )?;
 
-    let ids = vec![a, b, c, d, n_coeff_t, n_bias_t, e, f, added_t, f, h, i];
+    let ids = vec![
+        a, b, to22, c, d, n_coeff_t, n_bias_t, e, f, added_t, f, h, i,
+    ];
     let mut vals = Vec::new();
     for id in ids {
         g.fetch(id, true)?;
@@ -180,14 +186,19 @@ fn main() -> Result<(), GraphError> {
     let mut rng = rand::thread_rng();
     let a_val = Tensor::<f32>::rand(&mut rng, &[10, 2, 3]);
     let b_val = Tensor::<f32>::rand(&mut rng, &[3, 4]);
+    let to22_val = Tensor::<f32>::rand(&mut rng, &[3, 4]);
     let n_coeff = Tensor::<f32>::rand(&mut rng, &[4]);
     let n_bias = Tensor::<f32>::rand(&mut rng, &[4]);
     let added = Tensor::<f32>::rand(&mut rng, &[4]);
     let gpu_graph = gpu::GpuGraph::new()?;
-    let gpu_result = pass_graph(gpu_graph, &a_val, &b_val, &n_coeff, &n_bias, &added)?;
+    let gpu_result = pass_graph(
+        gpu_graph, &a_val, &b_val, &n_coeff, &n_bias, &added, &to22_val,
+    )?;
 
     let cpu_graph = CpuGraph::new();
-    let cpu_result = pass_graph(cpu_graph, &a_val, &b_val, &n_coeff, &n_bias, &added)?;
+    let cpu_result = pass_graph(
+        cpu_graph, &a_val, &b_val, &n_coeff, &n_bias, &added, &to22_val,
+    )?;
 
     for (t1, t2) in gpu_result.into_iter().zip(cpu_result.into_iter()) {
         let diff = (&t1 - &t2)?;

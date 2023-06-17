@@ -133,6 +133,7 @@ fn pass_graph<G: Graph>(
     b_val: &Tensor<f32>,
     n_coeff: &Tensor<f32>,
     n_bias: &Tensor<f32>,
+    added: &Tensor<f32>,
 ) -> Result<Vec<Tensor<f32>>, GraphError> {
     use femto_gpt::funcs::*;
 
@@ -140,23 +141,27 @@ fn pass_graph<G: Graph>(
     let b = g.alloc(Tensor::zeros(&[3, 4]), "".into())?;
     let n_coeff_t = g.alloc(Tensor::zeros(&[4]), "".into())?;
     let n_bias_t = g.alloc(Tensor::zeros(&[4]), "".into())?;
+    let added_t = g.alloc(Tensor::zeros(&[4]), "".into())?;
     let c = g.call(MatMul::new(), &[a, b])?;
     let d = g.call(LayerNorm::new(), &[c, n_coeff_t, n_bias_t])?;
     let e = g.call(Softmax::new(), &[d])?;
+    let f = g.call(Relu::new(), &[e])?;
+    let added_t = g.call(Add::new(), &[f, added_t])?;
 
     g.load(a, a_val)?;
     g.load(b, b_val)?;
     g.load(n_coeff_t, n_coeff)?;
     g.load(n_bias_t, n_bias)?;
+    g.load(added_t, added)?;
     g.forward(false)?;
     g.zero_grad()?;
     g.backward_all(
-        e,
+        f,
         CrossEntropy::new(4, Tensor::<usize>::zeros(&[10, 2])),
         Some(10),
     )?;
 
-    let ids = vec![a, b, c, d, n_coeff_t, n_bias_t, e];
+    let ids = vec![a, b, c, d, n_coeff_t, n_bias_t, e, f, added_t];
     let mut vals = Vec::new();
     for id in ids {
         g.fetch(id, true)?;
@@ -176,11 +181,12 @@ fn main() -> Result<(), GraphError> {
     let b_val = Tensor::<f32>::rand(&mut rng, &[3, 4]);
     let n_coeff = Tensor::<f32>::rand(&mut rng, &[4]);
     let n_bias = Tensor::<f32>::rand(&mut rng, &[4]);
+    let added = Tensor::<f32>::rand(&mut rng, &[4]);
     let gpu_graph = gpu::GpuGraph::new()?;
-    let gpu_result = pass_graph(gpu_graph, &a_val, &b_val, &n_coeff, &n_bias)?;
+    let gpu_result = pass_graph(gpu_graph, &a_val, &b_val, &n_coeff, &n_bias, &added)?;
 
     let cpu_graph = CpuGraph::new();
-    let cpu_result = pass_graph(cpu_graph, &a_val, &b_val, &n_coeff, &n_bias)?;
+    let cpu_result = pass_graph(cpu_graph, &a_val, &b_val, &n_coeff, &n_bias, &added)?;
 
     for (t1, t2) in gpu_result.into_iter().zip(cpu_result.into_iter()) {
         let diff = (&t1 - &t2)?;

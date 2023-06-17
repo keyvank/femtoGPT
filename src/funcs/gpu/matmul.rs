@@ -47,6 +47,7 @@ pub fn gpu_run(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
 pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
     let inp0_size = inps[0][..inps[0].len() - 2].iter().fold(1, |a, b| a * b);
     let inp1_size = inps[1][..inps[1].len() - 2].iter().fold(1, |a, b| a * b);
+    assert!(inp1_size <= inp0_size);
     assert_eq!(inps[0][inps[0].len() - 1], inps[1][inps[1].len() - 2]);
     let m = inps[0][inps[0].len() - 2];
     let n = inps[0][inps[0].len() - 1];

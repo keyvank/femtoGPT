@@ -146,8 +146,8 @@ fn pass_graph<G: Graph>(
     let d = g.call(LayerNorm::new(), &[c, n_coeff_t, n_bias_t])?;
     let e = g.call(Softmax::new(), &[d])?;
     let f = g.call(Relu::new(), &[e])?;
-    //let h = g.call(Add::new(), &[f, added_t])?;
-    let i = g.call(Coeff::new(2.), &[f])?;
+    let h = g.call(Add::new(), &[f, added_t])?;
+    let i = g.call(Coeff::new(2.), &[h])?;
 
     g.load(a, a_val)?;
     g.load(b, b_val)?;
@@ -162,7 +162,7 @@ fn pass_graph<G: Graph>(
         Some(10),
     )?;
 
-    let ids = vec![a, b, c, d, n_coeff_t, n_bias_t, e, f, added_t, f, i];
+    let ids = vec![a, b, c, d, n_coeff_t, n_bias_t, e, f, added_t, f, h, i];
     let mut vals = Vec::new();
     for id in ids {
         g.fetch(id, true)?;

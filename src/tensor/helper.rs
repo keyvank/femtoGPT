@@ -83,10 +83,3 @@ impl<
         self ^ &other.view()
     }
 }
-impl Not for &Tensor<bool> {
-    type Output = Tensor<bool>;
-
-    fn not(self) -> Self::Output {
-        !&self.view()
-    }
-}

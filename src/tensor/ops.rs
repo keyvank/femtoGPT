@@ -103,10 +103,3 @@ impl<
         })
     }
 }
-impl<'a> Not for &TensorView<'a, bool> {
-    type Output = Tensor<bool>;
-
-    fn not(self) -> Self::Output {
-        self.map_values(|b| !b)
-    }
-}

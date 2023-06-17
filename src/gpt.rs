@@ -174,10 +174,8 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
                 let head_size_sqrt_inv = (head_size as f32).powf(-0.5);
                 let kq_coeff = g.call(Coeff::new(head_size_sqrt_inv), &[kq])?;
 
-                let masked_kq = g.call(
-                    Mask::new(!&Tensor::<bool>::tril(num_tokens), f32::NEG_INFINITY),
-                    &[kq_coeff],
-                )?;
+                let masked_kq =
+                    g.call(TrilMask::new(num_tokens, f32::NEG_INFINITY), &[kq_coeff])?;
                 let soft_masked_kq = g.call(Softmax::new(), &[masked_kq])?;
                 let dropped_soft_masked_kq = g.call(Dropout::new(dropout), &[soft_masked_kq])?;
                 let atten = g.call(MatMul::new(), &[dropped_soft_masked_kq, v])?;

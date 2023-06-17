@@ -15,11 +15,11 @@ mod dropout;
 mod embedding;
 mod gelu;
 mod layer_norm;
-mod mask;
 mod matmul;
 mod relu;
 mod softmax;
 mod transpose;
+mod trilmask;
 
 pub use add::*;
 pub use cat::*;
@@ -29,11 +29,11 @@ pub use dropout::*;
 pub use embedding::*;
 pub use gelu::*;
 pub use layer_norm::*;
-pub use mask::*;
 pub use matmul::*;
 pub use relu::*;
 pub use softmax::*;
 pub use transpose::*;
+pub use trilmask::*;
 
 use super::tensor::*;
 

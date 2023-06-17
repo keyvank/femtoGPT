@@ -127,12 +127,6 @@ impl<V: TensorElement> Tensor<V> {
     }
 }
 
-impl<T: TensorOps<bool>> From<&T> for Tensor<f32> {
-    fn from(v: &T) -> Self {
-        v.map_values(|v| v.as_f32())
-    }
-}
-
 unsafe impl<V: TensorElement> Send for Tensor<V> {}
 unsafe impl<V: TensorElement> Sync for Tensor<V> {}
 
@@ -163,18 +157,17 @@ pub trait TensorMutOps<V: TensorElement>: TensorOps<V> {
     }
 }
 
+impl Tensor<f32> {
+    pub fn mean(&self) -> f32 {
+        self.blob().iter().cloned().sum::<f32>() / self.size() as f32
+    }
+}
+
 pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
     fn shape(&self) -> &[usize];
     fn blob(&self) -> &[V];
     fn tensor(&self) -> &Tensor<V>;
     fn offset(&self) -> usize;
-
-    fn mean(&self) -> f32
-    where
-        V: std::iter::Sum,
-    {
-        self.blob().iter().cloned().sum::<V>().as_f32() / self.size() as f32
-    }
 
     fn keep_right(&self, dims: usize) -> Result<TensorView<V>, TensorError> {
         let mut shape = self.shape().to_vec();

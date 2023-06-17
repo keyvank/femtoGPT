@@ -75,6 +75,10 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
             b += {np} * id_b;
             float *gb = grad_buff + {np} * id;
 
+            for(uint i = 0; i < {np}; i++) {{
+                gb[i] = 0.0;
+            }}
+
             // a_grad = (out_grad ^ b_T) -> mp * pn
             // b_grad = (a_T ^ out_grad) -> nm * mp
             for(uint i = 0; i < {m}; i++) {{

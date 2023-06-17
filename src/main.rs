@@ -131,25 +131,32 @@ fn pass_graph<G: Graph>(
     mut g: G,
     a_val: &Tensor<f32>,
     b_val: &Tensor<f32>,
+    n_coeff: &Tensor<f32>,
+    n_bias: &Tensor<f32>,
 ) -> Result<Vec<Tensor<f32>>, GraphError> {
     use femto_gpt::funcs::*;
 
     let a = g.alloc(Tensor::zeros(&[10, 2, 3]), "".into())?;
     let b = g.alloc(Tensor::zeros(&[3, 4]), "".into())?;
+    let n_coeff_t = g.alloc(Tensor::zeros(&[4]), "".into())?;
+    let n_bias_t = g.alloc(Tensor::zeros(&[4]), "".into())?;
     let c = g.call(MatMul::new(), &[a, b])?;
-    let d = g.call(Softmax::new(), &[c])?;
+    let d = g.call(LayerNorm::new(), &[c, n_coeff_t, n_bias_t])?;
+    let e = g.call(Softmax::new(), &[d])?;
 
     g.load(a, a_val)?;
     g.load(b, b_val)?;
+    g.load(n_coeff_t, n_coeff)?;
+    g.load(n_bias_t, n_bias)?;
     g.forward(false)?;
     g.zero_grad()?;
     g.backward_all(
-        d,
+        e,
         CrossEntropy::new(4, Tensor::<usize>::zeros(&[10, 2])),
         Some(10),
     )?;
 
-    let ids = vec![a, b, c, d];
+    let ids = vec![a, b, c, d, n_coeff_t, n_bias_t, e];
     let mut vals = Vec::new();
     for id in ids {
         g.fetch(id, true)?;
@@ -167,16 +174,18 @@ fn main() -> Result<(), GraphError> {
     let mut rng = rand::thread_rng();
     let a_val = Tensor::<f32>::rand(&mut rng, &[10, 2, 3]);
     let b_val = Tensor::<f32>::rand(&mut rng, &[3, 4]);
+    let n_coeff = Tensor::<f32>::rand(&mut rng, &[4]);
+    let n_bias = Tensor::<f32>::rand(&mut rng, &[4]);
     let gpu_graph = gpu::GpuGraph::new()?;
-    let gpu_result = pass_graph(gpu_graph, &a_val, &b_val)?;
+    let gpu_result = pass_graph(gpu_graph, &a_val, &b_val, &n_coeff, &n_bias)?;
 
     let cpu_graph = CpuGraph::new();
-    let cpu_result = pass_graph(cpu_graph, &a_val, &b_val)?;
+    let cpu_result = pass_graph(cpu_graph, &a_val, &b_val, &n_coeff, &n_bias)?;
 
     for (t1, t2) in gpu_result.into_iter().zip(cpu_result.into_iter()) {
         let diff = (&t1 - &t2)?;
-        let diff_zero = diff.blob().iter().map(|f| *f < 0.000001).all(|t| t);
-        println!("{:?}", diff_zero);
+        let diff_zero = diff.blob().iter().map(|f| *f < 0.0001).all(|t| t);
+        println!("{}", diff_zero);
     }
 
     Ok(())

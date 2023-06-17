@@ -55,6 +55,7 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
         if(id < {works}) {{
             out += id * {n};
             out_grad += id * {n};
+            a_grad += id * {n};
             for(uint i = 0; i < {n}; i++) {{
                 float si = out[i];
                 for(uint j = 0; j < {n}; j++) {{
@@ -62,7 +63,7 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
                         a_grad[i] += si * (1. - si) * out_grad[j];
                     }} else {{
                         float sj = out[j];
-                        a_grad[i] = -si * sj * out_grad[j];
+                        a_grad[i] += -si * sj * out_grad[j];
                     }}
                 }}
             }}

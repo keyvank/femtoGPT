@@ -27,6 +27,18 @@ pub enum GeneralTensor {
 }
 
 impl GeneralTensor {
+    pub fn size(&self) -> usize {
+        match self {
+            GeneralTensor::Float(t) => t.size(),
+            GeneralTensor::Usize(t) => t.size(),
+        }
+    }
+    pub fn shape(&self) -> &[usize] {
+        match self {
+            GeneralTensor::Float(t) => t.shape(),
+            GeneralTensor::Usize(t) => t.shape(),
+        }
+    }
     pub fn as_float(&self) -> Result<&Tensor<f32>, TensorError> {
         match self {
             GeneralTensor::Float(t) => Ok(t),

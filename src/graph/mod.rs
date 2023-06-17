@@ -27,8 +27,9 @@ pub trait Graph {
         tensor_id: TensorId,
         tensor: &T,
     ) -> Result<(), GraphError>;
-    fn zero_grad(&mut self);
+    fn zero_grad(&mut self) -> Result<(), GraphError>;
     fn name_of(&self, id: TensorId) -> Result<&String, GraphError>;
+    fn fetch(&mut self, id: TensorId, grad: bool) -> Result<(), GraphError>;
     fn get(&self, id: TensorId) -> Result<&GeneralTensor, GraphError>;
     fn get_grad(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError>;
     fn backward_all(
@@ -87,6 +88,8 @@ pub enum GraphError {
     TensorNotFound(usize),
     #[error("graph is not ready!")]
     NotReady,
+    #[error("tensor types incompatible!")]
+    IncompatibleTypes,
 
     #[cfg(feature = "gpu")]
     #[error("gpu error: {0}")]
@@ -160,10 +163,11 @@ impl Graph for CpuGraph {
         self.grads[tensor_id] = tensor.view().into();
         Ok(())
     }
-    fn zero_grad(&mut self) {
+    fn zero_grad(&mut self) -> Result<(), GraphError> {
         self.grads.iter_mut().for_each(|t| {
             t.fill(0.);
         });
+        Ok(())
     }
 
     fn name_of(&self, id: TensorId) -> Result<&String, GraphError> {
@@ -257,6 +261,10 @@ impl Graph for CpuGraph {
             .into_iter()
             .unzip();
         opt.step(params, grads, learning_rate)?;
+        Ok(())
+    }
+    fn fetch(&mut self, _tensor_id: TensorId, _grad: bool) -> Result<(), GraphError> {
+        // All tensors are ready by default in a CPU graph!
         Ok(())
     }
 }

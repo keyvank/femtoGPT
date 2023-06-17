@@ -354,7 +354,7 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
                     graph.load_usize(self.token_input, &xs)?;
 
                     graph.forward(true)?;
-                    graph.zero_grad();
+                    graph.zero_grad()?;
                     let err = graph.backward_all(
                         self.output,
                         CrossEntropy::new(self.vocab_size, ys.clone()),

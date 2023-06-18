@@ -1,6 +1,7 @@
 pub mod add;
 pub mod cat;
 pub mod coeff;
+pub mod dropout;
 pub mod embedding;
 pub mod layer_norm;
 pub mod matmul;

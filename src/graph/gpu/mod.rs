@@ -243,8 +243,8 @@ impl Graph for GpuGraph {
         }
         Ok(())
     }
-    fn name_of(&self, _id: TensorId) -> Result<&String, GraphError> {
-        unimplemented!();
+    fn name_of(&self, id: TensorId) -> Result<&String, GraphError> {
+        self.names.get(id).ok_or(GraphError::TensorNotFound(id))
     }
     fn get(&self, id: TensorId) -> Result<&GeneralTensor, GraphError> {
         let gt = self.tensors.get(id).unwrap();
@@ -409,6 +409,7 @@ impl Graph for GpuGraph {
         unimplemented!();
     }
     fn fetch(&mut self, tensor_id: TensorId, grad: bool) -> Result<(), GraphError> {
+        self.compile()?;
         let gt = self.tensors.get_mut(tensor_id).unwrap();
         if !gt.is_sync {
             gt.buffer

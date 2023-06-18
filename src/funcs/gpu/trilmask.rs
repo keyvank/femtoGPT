@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn gpu_run(out_id: TensorId, inps: &[Vec<usize>], n: usize, value: f32) -> GpuFunction {
+pub fn gpu_run(out_id: TensorId, inps: &[Vec<usize>], n: usize) -> GpuFunction {
     let works = inps[0][..inps[0].len() - 2].iter().fold(1, |a, b| a * b);
 
     let source_code = format!(

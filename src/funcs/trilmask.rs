@@ -7,11 +7,10 @@ use super::{gpu, GpuFunction, GpuFunctionGroup, TensorId};
 #[derive(Debug, Clone)]
 pub struct TrilMask {
     n: usize,
-    value: f32,
 }
 impl TrilMask {
-    pub fn new(n: usize, value: f32) -> Box<dyn Function> {
-        Box::new(Self { n, value })
+    pub fn new(n: usize) -> Box<dyn Function> {
+        Box::new(Self { n })
     }
 }
 
@@ -29,7 +28,7 @@ impl Function for TrilMask {
                     dat.push(if j <= i {
                         t_blob[i * self.n + j]
                     } else {
-                        self.value
+                        f32::NEG_INFINITY
                     });
                 }
             }
@@ -58,7 +57,7 @@ impl Function for TrilMask {
 
     #[cfg(feature = "gpu")]
     fn gpu_run(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
-        gpu::trilmask::gpu_run(out_id, inps, self.n, self.value)
+        gpu::trilmask::gpu_run(out_id, inps, self.n)
     }
 
     #[cfg(feature = "gpu")]

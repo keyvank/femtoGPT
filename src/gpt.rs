@@ -174,8 +174,7 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
                 let head_size_sqrt_inv = (head_size as f32).powf(-0.5);
                 let kq_coeff = g.call(Coeff::new(head_size_sqrt_inv), &[kq])?;
 
-                let masked_kq =
-                    g.call(TrilMask::new(num_tokens, f32::NEG_INFINITY), &[kq_coeff])?;
+                let masked_kq = g.call(TrilMask::new(num_tokens), &[kq_coeff])?;
                 let soft_masked_kq = g.call(Softmax::new(), &[masked_kq])?;
                 let dropped_soft_masked_kq = g.call(Dropout::new(dropout), &[soft_masked_kq])?;
                 let atten = g.call(MatMul::new(), &[dropped_soft_masked_kq, v])?;
@@ -289,6 +288,14 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
         })
     }
 
+    pub fn sync(&mut self) -> Result<(), GraphError> {
+        self.params
+            .iter()
+            .map(|p| self.graph.fetch(*p, false))
+            .collect::<Result<Vec<_>, GraphError>>()?;
+        Ok(())
+    }
+
     pub fn num_params(&self) -> usize {
         self.params
             .iter()
@@ -399,38 +406,37 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
     }
 
     pub fn infer<R: Rng, F: Fn(usize) -> ()>(
-        &self,
+        &mut self,
         rng: &mut R,
         prompt: &[usize],
         count: usize,
         temperature: f32,
         callback: F,
-    ) -> Result<Vec<usize>, GraphError>
-    where
-        G: Clone + Send + Sync,
-    {
+    ) -> Result<Vec<usize>, GraphError> {
         let mut cnt = prompt.len();
         let mut context = vec![0; self.num_tokens];
         context[..prompt.len()].copy_from_slice(prompt);
-        let mut graph = self.graph.clone();
 
-        graph.load(self.pos_input, &self.pos_input_fixed)?;
+        self.graph.load(self.pos_input, &self.pos_input_fixed)?;
 
         for ch in prompt {
             callback(*ch);
         }
         let mut chs = prompt.to_vec();
         for _ in 0..count {
-            graph.load_usize(
+            self.graph.load_usize(
                 self.token_input,
                 &Tensor::raw(&[self.num_tokens], context.clone())?,
             )?;
-            graph.forward(false)?;
+
+            self.graph.forward(false)?;
+            self.graph.fetch(self.output, false)?;
             let next_ch = select(
                 rng,
-                &graph.get(self.output)?.as_float()?.get(cnt - 1)?,
+                &self.graph.get(self.output)?.as_float()?.get(cnt - 1)?,
                 temperature,
             )?;
+
             chs.push(next_ch);
             callback(next_ch);
             if cnt == self.num_tokens {

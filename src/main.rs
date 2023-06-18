@@ -151,6 +151,7 @@ fn pass_graph<G: Graph>(
     let h = g.call(Add::new(), &[f, added_t])?;
     let i = g.call(Coeff::new(2.), &[h])?;
     let j = g.call(MatMul::new(), &[i, to22])?;
+    let k = g.call(Cat::new(), &[j, j])?;
 
     g.load(a, a_val)?;
     g.load(b, b_val)?;
@@ -161,13 +162,13 @@ fn pass_graph<G: Graph>(
     g.forward(false)?;
     g.zero_grad()?;
     g.backward_all(
-        j,
-        CrossEntropy::new(2, Tensor::<usize>::zeros(&[10, 2])),
+        k,
+        CrossEntropy::new(4, Tensor::<usize>::zeros(&[10, 2])),
         Some(10),
     )?;
 
     let ids = vec![
-        a, b, to22, c, d, n_coeff_t, n_bias_t, e, f, added_t, f, h, i,
+        a, b, to22, c, d, n_coeff_t, n_bias_t, e, f, added_t, f, h, i, k,
     ];
     let mut vals = Vec::new();
     for id in ids {
@@ -186,7 +187,7 @@ fn main() -> Result<(), GraphError> {
     let mut rng = rand::thread_rng();
     let a_val = Tensor::<f32>::rand(&mut rng, &[10, 2, 3]);
     let b_val = Tensor::<f32>::rand(&mut rng, &[3, 4]);
-    let to22_val = Tensor::<f32>::rand(&mut rng, &[3, 4]);
+    let to22_val = Tensor::<f32>::rand(&mut rng, &[4, 2]);
     let n_coeff = Tensor::<f32>::rand(&mut rng, &[4]);
     let n_bias = Tensor::<f32>::rand(&mut rng, &[4]);
     let added = Tensor::<f32>::rand(&mut rng, &[4]);
@@ -203,7 +204,7 @@ fn main() -> Result<(), GraphError> {
     for (t1, t2) in gpu_result.into_iter().zip(cpu_result.into_iter()) {
         let diff = (&t1 - &t2)?;
         let diff_zero = diff.blob().iter().map(|f| *f < 0.0001).all(|t| t);
-        println!("{}", diff_zero);
+        println!("{:?}", diff_zero);
     }
 
     Ok(())

@@ -1,4 +1,5 @@
 pub mod add;
+pub mod cat;
 pub mod coeff;
 pub mod embedding;
 pub mod layer_norm;

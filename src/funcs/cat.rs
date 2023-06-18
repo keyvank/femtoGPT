@@ -1,6 +1,9 @@
 use super::Function;
 use crate::tensor::*;
 
+#[cfg(feature = "gpu")]
+use super::{gpu, GpuFunction, GpuFunctionGroup, TensorId};
+
 #[derive(Debug, Clone)]
 pub struct Cat {}
 impl Cat {
@@ -76,5 +79,15 @@ impl Function for Cat {
     }
     fn clone_box(&self) -> Box<dyn Function> {
         Box::new(self.clone())
+    }
+
+    #[cfg(feature = "gpu")]
+    fn gpu_run(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
+        gpu::cat::gpu_run(out_id, inps)
+    }
+
+    #[cfg(feature = "gpu")]
+    fn gpu_grad(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
+        gpu::cat::gpu_grad(out_id, inps)
     }
 }

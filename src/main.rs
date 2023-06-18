@@ -127,53 +127,26 @@ use femto_gpt::graph::Graph;
 use femto_gpt::tensor::*;
 
 #[cfg(feature = "gpu")]
-fn pass_graph<G: Graph>(
-    mut g: G,
-    a_val: &Tensor<f32>,
-    b_val: &Tensor<f32>,
-    n_coeff: &Tensor<f32>,
-    n_bias: &Tensor<f32>,
-    added: &Tensor<f32>,
-    to22_val: &Tensor<f32>,
-) -> Result<Vec<Tensor<f32>>, GraphError> {
+fn pass_graph<G: Graph>(mut g: G, emb_val: &Tensor<f32>) -> Result<Vec<Tensor<f32>>, GraphError> {
     use femto_gpt::funcs::*;
 
-    let a = g.alloc(Tensor::zeros(&[10, 2, 3]), "".into())?;
-    let b = g.alloc(Tensor::zeros(&[3, 4]), "".into())?;
-    let to22 = g.alloc(Tensor::zeros(&[4, 2]), "".into())?;
-    let n_coeff_t = g.alloc(Tensor::zeros(&[4]), "".into())?;
-    let n_bias_t = g.alloc(Tensor::zeros(&[4]), "".into())?;
-    let added_t = g.alloc(Tensor::zeros(&[4]), "".into())?;
-    let c = g.call(MatMul::new(), &[a, b])?;
-    let d = g.call(LayerNorm::new(), &[c, n_coeff_t, n_bias_t])?;
-    let e = g.call(Softmax::new(), &[d])?;
-    let f = g.call(Relu::new(), &[e])?;
-    let h = g.call(Add::new(), &[f, added_t])?;
-    let i = g.call(Coeff::new(2.), &[h])?;
-    let j = g.call(MatMul::new(), &[i, to22])?;
-    let k = g.call(Cat::new(), &[j, j])?;
-    let l = g.call(MatMul::new(), &[k, to22])?;
-    let m = g.call(TrilMask::new(2, f32::NEG_INFINITY), &[l])?;
-    let n = g.call(Softmax::new(), &[m])?;
-    let o = g.call(Transpose::new(), &[n])?;
+    let inp = g.alloc_usize(
+        Tensor::raw(&[10], vec![0, 2, 1, 0, 3, 0, 2, 0, 0, 1])?,
+        "".into(),
+    )?;
+    let emb = g.alloc(Tensor::zeros(&[5, 8]), "".into())?;
+    let out = g.call(Embedding::new(), &[inp, emb])?;
 
-    g.load(a, a_val)?;
-    g.load(b, b_val)?;
-    g.load(n_coeff_t, n_coeff)?;
-    g.load(n_bias_t, n_bias)?;
-    g.load(added_t, added)?;
-    g.load(to22, to22_val)?;
+    g.load(emb, emb_val)?;
     g.forward(false)?;
     g.zero_grad()?;
     g.backward_all(
-        o,
-        CrossEntropy::new(2, Tensor::<usize>::zeros(&[10, 2])),
+        out,
+        CrossEntropy::new(8, Tensor::<usize>::zeros(&[10])),
         Some(10),
     )?;
 
-    let ids = vec![
-        a, b, to22, c, d, n_coeff_t, n_bias_t, e, f, added_t, f, h, i, k, l, m, n,
-    ];
+    let ids = vec![emb, out];
     let mut vals = Vec::new();
     for id in ids {
         g.fetch(id, true)?;
@@ -189,26 +162,17 @@ fn main() -> Result<(), GraphError> {
     use femto_gpt::graph::CpuGraph;
 
     let mut rng = rand::thread_rng();
-    let a_val = Tensor::<f32>::rand(&mut rng, &[10, 2, 3]);
-    let b_val = Tensor::<f32>::rand(&mut rng, &[3, 4]);
-    let to22_val = Tensor::<f32>::rand(&mut rng, &[4, 2]);
-    let n_coeff = Tensor::<f32>::rand(&mut rng, &[4]);
-    let n_bias = Tensor::<f32>::rand(&mut rng, &[4]);
-    let added = Tensor::<f32>::rand(&mut rng, &[4]);
+    let emb_val = Tensor::<f32>::rand(&mut rng, &[5, 8]);
     let gpu_graph = gpu::GpuGraph::new()?;
-    let gpu_result = pass_graph(
-        gpu_graph, &a_val, &b_val, &n_coeff, &n_bias, &added, &to22_val,
-    )?;
+    let gpu_result = pass_graph(gpu_graph, &emb_val)?;
 
     let cpu_graph = CpuGraph::new();
-    let cpu_result = pass_graph(
-        cpu_graph, &a_val, &b_val, &n_coeff, &n_bias, &added, &to22_val,
-    )?;
+    let cpu_result = pass_graph(cpu_graph, &emb_val)?;
 
     for (t1, t2) in gpu_result.into_iter().zip(cpu_result.into_iter()) {
         let diff = (&t1 - &t2)?;
         let diff_zero = diff.blob().iter().map(|f| *f < 0.0001).all(|t| t);
-        println!("{:?}", diff_zero);
+        println!("{}", diff_zero);
     }
 
     Ok(())

@@ -160,7 +160,7 @@ impl Graph for GpuGraph {
     fn alloc_usize(&mut self, t: Tensor<usize>, name: String) -> Result<TensorId, GraphError> {
         self.grads.push(GpuTensor {
             buffer: None,
-            mirror: GeneralTensor::Usize(Tensor::zeros(t.shape())),
+            mirror: GeneralTensor::Float(Tensor::zeros(t.shape())),
             is_sync: false,
         });
         self.tensors.push(GpuTensor {

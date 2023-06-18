@@ -333,7 +333,7 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
         Ok(state)
     }
 
-    pub fn train<F: Fn(usize) -> f32, C: Fn(&Self) -> Result<(), GraphError>>(
+    pub fn train<F: Fn(usize) -> f32, C: Fn(&mut Self) -> Result<(), GraphError>>(
         &mut self,
         dataset: &[usize],
         num_batches: usize,

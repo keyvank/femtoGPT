@@ -155,6 +155,7 @@ fn pass_graph<G: Graph>(
     let l = g.call(MatMul::new(), &[k, to22])?;
     let m = g.call(TrilMask::new(2, f32::NEG_INFINITY), &[l])?;
     let n = g.call(Softmax::new(), &[m])?;
+    let o = g.call(Transpose::new(), &[n])?;
 
     g.load(a, a_val)?;
     g.load(b, b_val)?;
@@ -165,7 +166,7 @@ fn pass_graph<G: Graph>(
     g.forward(false)?;
     g.zero_grad()?;
     g.backward_all(
-        n,
+        o,
         CrossEntropy::new(2, Tensor::<usize>::zeros(&[10, 2])),
         Some(10),
     )?;

@@ -6,6 +6,7 @@ pub mod layer_norm;
 pub mod matmul;
 pub mod relu;
 pub mod softmax;
+pub mod transpose;
 pub mod trilmask;
 
 use crate::graph::TensorId;

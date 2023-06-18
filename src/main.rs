@@ -152,6 +152,9 @@ fn pass_graph<G: Graph>(
     let i = g.call(Coeff::new(2.), &[h])?;
     let j = g.call(MatMul::new(), &[i, to22])?;
     let k = g.call(Cat::new(), &[j, j])?;
+    let l = g.call(MatMul::new(), &[k, to22])?;
+    let m = g.call(TrilMask::new(2, f32::NEG_INFINITY), &[l])?;
+    let n = g.call(Softmax::new(), &[m])?;
 
     g.load(a, a_val)?;
     g.load(b, b_val)?;
@@ -162,13 +165,13 @@ fn pass_graph<G: Graph>(
     g.forward(false)?;
     g.zero_grad()?;
     g.backward_all(
-        k,
-        CrossEntropy::new(4, Tensor::<usize>::zeros(&[10, 2])),
+        n,
+        CrossEntropy::new(2, Tensor::<usize>::zeros(&[10, 2])),
         Some(10),
     )?;
 
     let ids = vec![
-        a, b, to22, c, d, n_coeff_t, n_bias_t, e, f, added_t, f, h, i, k,
+        a, b, to22, c, d, n_coeff_t, n_bias_t, e, f, added_t, f, h, i, k, l, m, n,
     ];
     let mut vals = Vec::new();
     for id in ids {

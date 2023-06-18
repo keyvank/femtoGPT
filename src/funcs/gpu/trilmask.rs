@@ -16,7 +16,7 @@ pub fn gpu_run(out_id: TensorId, inps: &[Vec<usize>], n: usize, value: f32) -> G
                     if(j <= i) {{
                         out[i * {n} + j] = a[i * {n} + j];
                     }} else {{
-                        out[i * {n} + j] = {value};
+                        out[i * {n} + j] = -INFINITY;
                     }}
                 }}
             }}
@@ -44,6 +44,7 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>], n: usize) -> GpuFunctionG
                         __global float* out_grad,
                         __global float* a,
                         __global float* a_grad) {{
+        uint id = get_global_id(0);
         out_grad += {n} * {n} * id;
         a_grad += {n} * {n} * id;
         if(id < {works}) {{

@@ -112,12 +112,20 @@ impl<G: Graph> GPT<G> {
         head_size: usize,
         dropout: f32,
     ) -> Result<Self, GraphError> {
+        // Mapping each token to a `embedding_degree` dimension space through a lookup table
         let token_embedding = g.alloc(
             Tensor::<f32>::rand(rng, &[vocab_size, embedding_degree]),
             true,
             "token_embedding".into(),
         )?;
 
+        // Token inputs. We will get `num_tokens` tokens as inputs and will have `num_tokens`
+        // outputs.
+        // In the case of CPU training, it's much more efficient to parallelize over instances
+        // in a single batch. (I.e. it's not very efficient to parallelize a matrix multiplication
+        // operation on CPUs. Better approach is to process a 32-instanced batch on a 32-core CPU,
+        // where each instance runs on its own core, without parallelizing operations)
+        // That's why we DO NOT specify a `batch_size` when training on a CPU.
         let token_input = g.alloc_usize(
             Tensor::<usize>::zeros(&if let Some(batch_size) = batch_size {
                 vec![batch_size, num_tokens]
@@ -127,13 +135,19 @@ impl<G: Graph> GPT<G> {
             "token_input".into(),
         )?;
 
+        // Map the token index into a `embedding_degree` dimension vector through the `token_embedding`
+        // lookup table.
         let embedded_token_input = g.call(Embedding::new(), &[token_input, token_embedding])?;
 
+        // Map token positions into `embedding_degree` dimension vectors.
         let pos_input = g.alloc(
             Tensor::<f32>::rand(rng, &[num_tokens, embedding_degree]),
             false,
             "pos_input".into(),
         )?;
+
+        // Positional+Token information will both reside in a single `embedding_degree` dimension
+        // vector.
         let inp = g.call(Add::new(), &[embedded_token_input, pos_input])?;
 
         let mut curr_inp = inp;
@@ -155,24 +169,30 @@ impl<G: Graph> GPT<G> {
 
             // Multi-head Attention
             for h in 0..num_heads {
+                // Key
                 let k_params = g.alloc(
                     Tensor::<f32>::rand(rng, &[embedding_degree, head_size]),
                     true,
                     format!("head_{}_{}_k", l, h),
                 )?;
+                let k = g.call(MatMul::new(), &[norm_inp, k_params])?;
+
+                // Query
                 let q_params = g.alloc(
                     Tensor::<f32>::rand(rng, &[embedding_degree, head_size]),
                     true,
                     format!("head_{}_{}_q", l, h),
                 )?;
+                let q = g.call(MatMul::new(), &[norm_inp, q_params])?;
+
+                // Value
                 let v_params = g.alloc(
                     Tensor::<f32>::rand(rng, &[embedding_degree, head_size]),
                     true,
                     format!("head_{}_{}_v", l, h),
                 )?;
-                let k = g.call(MatMul::new(), &[norm_inp, k_params])?;
-                let q = g.call(MatMul::new(), &[norm_inp, q_params])?;
                 let v = g.call(MatMul::new(), &[norm_inp, v_params])?;
+
                 let q_t = g.call(Transpose::new(), &[q])?;
                 let kq = g.call(MatMul::new(), &[k, q_t])?;
 

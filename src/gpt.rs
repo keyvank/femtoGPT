@@ -1,6 +1,6 @@
 use crate::funcs::*;
 use crate::graph::{Graph, GraphError, TensorId};
-use crate::optimizer::Optimizer;
+use crate::optimizer::{Optimizer, OptimizerState};
 use crate::tensor::{GeneralTensor, Tensor, TensorError, TensorOps};
 use rand::Rng;
 use rayon::prelude::*;
@@ -9,20 +9,18 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrainingState<O: Clone> {
+pub struct TrainingState {
     pub tensors: HashMap<String, Tensor<f32>>,
-    pub optimizer: O,
+    pub optimizer: OptimizerState,
 }
 
-pub struct GPT<G: Graph, O: Optimizer> {
+pub struct GPT<G: Graph> {
     graph: G,
     vocab_size: usize,
     num_tokens: usize,
-    params: Vec<TensorId>,
     token_input: TensorId,
     pos_input: TensorId,
     output: TensorId,
-    optimizer: O,
     pos_input_fixed: Tensor<f32>,
 }
 
@@ -101,10 +99,11 @@ fn pos_encode_inter(num_tokens: usize, embedding_size: usize) -> Tensor<f32> {
     Tensor::raw(&[rows, cols], raw_new).unwrap()
 }
 
-impl<G: Graph, O: Optimizer> GPT<G, O> {
+impl<G: Graph> GPT<G> {
     pub fn new<R: Rng>(
         rng: &mut R,
         mut g: G,
+        batch_size: Option<usize>,
         vocab_size: usize,
         embedding_degree: usize,
         num_tokens: usize,
@@ -112,40 +111,44 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
         num_heads: usize,
         head_size: usize,
         dropout: f32,
-        optimizer: O,
     ) -> Result<Self, GraphError> {
         let token_embedding = g.alloc(
             Tensor::<f32>::rand(rng, &[vocab_size, embedding_degree]),
+            true,
             "token_embedding".into(),
         )?;
-        let token_input =
-            g.alloc_usize(Tensor::<usize>::zeros(&[num_tokens]), "token_input".into())?;
+
+        let token_input = g.alloc_usize(
+            Tensor::<usize>::zeros(&if let Some(batch_size) = batch_size {
+                vec![batch_size, num_tokens]
+            } else {
+                vec![num_tokens]
+            }),
+            "token_input".into(),
+        )?;
 
         let embedded_token_input = g.call(Embedding::new(), &[token_input, token_embedding])?;
 
         let pos_input = g.alloc(
             Tensor::<f32>::rand(rng, &[num_tokens, embedding_degree]),
+            false,
             "pos_input".into(),
         )?;
         let inp = g.call(Add::new(), &[embedded_token_input, pos_input])?;
-
-        // Keep track of tensor-ids of learnable tensors!
-        let mut params: Vec<TensorId> = Vec::new();
-
-        params.extend(&[token_embedding]);
 
         let mut curr_inp = inp;
         for l in 0..num_layers {
             // Normalize input before applying multi-head attention
             let norm_coeff = g.alloc(
                 Tensor::<f32>::rand(rng, &[embedding_degree]),
+                true,
                 format!("norm_{}_coeff", l),
             )?;
             let norm_bias = g.alloc(
                 Tensor::<f32>::zeros(&[embedding_degree]),
+                true,
                 format!("norm_{}_bias", l),
             )?;
-            params.extend(&[norm_coeff, norm_bias]);
             let norm_inp = g.call(LayerNorm::new(), &[curr_inp, norm_coeff, norm_bias])?;
 
             let mut heads = Vec::new();
@@ -154,17 +157,19 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
             for h in 0..num_heads {
                 let k_params = g.alloc(
                     Tensor::<f32>::rand(rng, &[embedding_degree, head_size]),
+                    true,
                     format!("head_{}_{}_k", l, h),
                 )?;
                 let q_params = g.alloc(
                     Tensor::<f32>::rand(rng, &[embedding_degree, head_size]),
+                    true,
                     format!("head_{}_{}_q", l, h),
                 )?;
                 let v_params = g.alloc(
                     Tensor::<f32>::rand(rng, &[embedding_degree, head_size]),
+                    true,
                     format!("head_{}_{}_v", l, h),
                 )?;
-                params.extend(&[k_params, q_params, v_params]);
                 let k = g.call(MatMul::new(), &[norm_inp, k_params])?;
                 let q = g.call(MatMul::new(), &[norm_inp, q_params])?;
                 let v = g.call(MatMul::new(), &[norm_inp, v_params])?;
@@ -185,10 +190,12 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
             let cat = g.call(Cat::new(), &heads)?;
             let proj_params = g.alloc(
                 Tensor::<f32>::rand(rng, &[num_heads * head_size, embedding_degree]),
+                true,
                 format!("proj_{}_weights", l),
             )?;
             let proj_bias_params = g.alloc(
                 Tensor::<f32>::zeros(&[embedding_degree]),
+                true,
                 format!("proj_{}_bias", l),
             )?;
             let proj_cat = g.call(MatMul::new(), &[cat, proj_params])?;
@@ -199,10 +206,12 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
             let add_atten = g.call(Add::new(), &[norm_inp, dropped_proj_cat_bias])?;
             let add_atten_norm_coeff = g.alloc(
                 Tensor::<f32>::rand(rng, &[embedding_degree]),
+                true,
                 format!("atten_norm_{}_coeff", l),
             )?;
             let add_atten_norm_bias = g.alloc(
                 Tensor::<f32>::zeros(&[embedding_degree]),
+                true,
                 format!("atten_norm_{}_bias", l),
             )?;
             let add_atten_norm = g.call(
@@ -216,10 +225,12 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
             // Linear 4*embedding_degree -> embedding_degree
             let lin1_params = g.alloc(
                 Tensor::<f32>::rand(rng, &[embedding_degree, 4 * embedding_degree]),
+                true,
                 format!("feedforward1_{}_weights", l),
             )?;
             let bias1_params = g.alloc(
                 Tensor::<f32>::zeros(&[4 * embedding_degree]),
+                true,
                 format!("feedforward1_{}_bias", l),
             )?;
             let lin1_result = g.call(MatMul::new(), &[add_atten_norm, lin1_params])?;
@@ -227,25 +238,16 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
             let lin1_act = g.call(Relu::new(), &[lin1_bias_result])?;
             let lin2_params = g.alloc(
                 Tensor::<f32>::rand(rng, &[4 * embedding_degree, embedding_degree]),
+                true,
                 format!("feedforward2_{}_weights", l),
             )?;
             let bias2_params = g.alloc(
                 Tensor::<f32>::zeros(&[embedding_degree]),
+                true,
                 format!("feedforward2_{}_bias", l),
             )?;
             let lin2_result = g.call(MatMul::new(), &[lin1_act, lin2_params])?;
             let lin2_bias_result = g.call(Add::new(), &[lin2_result, bias2_params])?;
-
-            params.extend(&[
-                proj_params,
-                proj_bias_params,
-                lin1_params,
-                bias1_params,
-                lin2_params,
-                bias2_params,
-                add_atten_norm_coeff,
-                add_atten_norm_bias,
-            ]);
 
             curr_inp = g.call(Add::new(), &[add_atten_norm, lin2_bias_result])?;
         }
@@ -253,79 +255,83 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
         // Normalize the output after the last layer
         let norm_out_coeff = g.alloc(
             Tensor::<f32>::rand(rng, &[embedding_degree]),
+            true,
             format!("head_norm_coeff"),
         )?;
         let norm_out_bias = g.alloc(
             Tensor::<f32>::zeros(&[embedding_degree]),
+            true,
             format!("head_norm_bias"),
         )?;
-        params.extend(&[norm_out_coeff, norm_out_bias]);
         let norm_out = g.call(LayerNorm::new(), &[curr_inp, norm_out_coeff, norm_out_bias])?;
 
         // Map from embedding_degree to vocab_size through a linear layer
         let to_vocab = g.alloc(
             Tensor::<f32>::rand(rng, &[embedding_degree, vocab_size]),
+            true,
             format!("head_map_weights"),
         )?;
         let to_vocab_bias = g.alloc(
             Tensor::<f32>::zeros(&[vocab_size]),
+            true,
             format!("head_map_bias"),
         )?;
         let result_lin = g.call(MatMul::new(), &[norm_out, to_vocab])?;
         let output = g.call(Add::new(), &[result_lin, to_vocab_bias])?;
-        params.extend(&[to_vocab, to_vocab_bias]);
 
         Ok(Self {
             graph: g,
             vocab_size,
             num_tokens,
-            params,
             token_input,
             pos_input,
             output,
-            optimizer,
             pos_input_fixed: pos_encode_inter(num_tokens, embedding_degree),
         })
     }
 
     pub fn sync(&mut self) -> Result<(), GraphError> {
-        self.params
-            .iter()
-            .map(|p| self.graph.fetch(*p, false))
+        self.graph
+            .params()
+            .to_vec()
+            .into_iter()
+            .map(|p| self.graph.fetch(p, false))
             .collect::<Result<Vec<_>, GraphError>>()?;
         Ok(())
     }
 
     pub fn num_params(&self) -> usize {
-        self.params
-            .iter()
-            .map(|p| self.graph.get(*p).unwrap().as_float().unwrap().size())
+        self.graph
+            .params()
+            .to_vec()
+            .into_iter()
+            .map(|p| self.graph.get(p).unwrap().as_float().unwrap().size())
             .sum::<usize>()
     }
 
     pub fn set_training_state(
         &mut self,
-        training_state: TrainingState<O>,
+        training_state: TrainingState,
         load_optimizer: bool,
     ) -> Result<(), GraphError> {
-        for p in self.params.iter() {
-            let name = self.graph.name_of(*p)?;
+        for p in self.graph.params().to_vec() {
+            let name = self.graph.name_of(p)?;
             if let Some(t) = training_state.tensors.get(name) {
-                self.graph.load(*p, t)?;
+                self.graph.load(p, t)?;
             }
         }
         if load_optimizer {
-            self.optimizer = training_state.optimizer;
+            self.graph.set_optimizer_state(&training_state.optimizer)?;
         }
         Ok(())
     }
 
-    pub fn get_training_state(&self) -> Result<TrainingState<O>, GraphError> {
+    pub fn get_training_state(&self) -> Result<TrainingState, GraphError> {
         let mut state = TrainingState {
             tensors: Default::default(),
-            optimizer: self.optimizer.clone(),
+            optimizer: self.graph.get_optimizer_state()?,
         };
-        for p in self.params.iter() {
+        for p in self.graph.params().iter() {
             let k = self.graph.name_of(*p)?.to_string();
             let v = self.graph.get(*p)?.as_float()?.clone();
             state.tensors.insert(k, v);
@@ -333,12 +339,17 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
         Ok(state)
     }
 
-    pub fn train<F: Fn(usize) -> f32, C: Fn(&mut Self) -> Result<(), GraphError>>(
+    pub fn train_cpu<
+        O: Optimizer,
+        F: Fn(usize) -> f32,
+        C: Fn(&mut Self) -> Result<(), GraphError>,
+    >(
         &mut self,
         dataset: &[usize],
         num_batches: usize,
         batch_size: usize,
         limit: Option<usize>,
+        optimizer: &O,
         learning_rate: F,
         callback: C,
     ) -> Result<(), GraphError>
@@ -357,7 +368,6 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
                     let (xs, ys) = sample_dataset(dataset, 1, self.num_tokens, &mut rng);
 
                     graph.load_usize(self.token_input, &xs)?;
-
                     graph.forward(true)?;
                     graph.zero_grad()?;
                     let err = graph.backward_all(
@@ -371,34 +381,74 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
                 .into_iter()
                 .unzip();
             for (id, avg) in self
-                .params
-                .par_iter()
+                .graph
+                .params()
+                .to_vec()
+                .into_iter()
                 .map(|id| {
                     let mut avg = Tensor::<f32>::scalar(0.);
                     for g in graphs.iter() {
-                        avg = (&avg + g.get_grad(*id)?)?;
+                        avg = (&avg + g.get_grad(id)?)?;
                     }
                     avg = avg.map_values(|f| f / graphs.len() as f32);
                     Ok((id, avg))
                 })
                 .collect::<Result<Vec<_>, GraphError>>()?
             {
-                self.graph.load_grad(*id, &avg)?;
+                self.graph.load_grad(id, &avg)?;
             }
             let avg_loss = errs.iter().sum::<f32>() / errs.len() as f32;
-            let lr = learning_rate(self.optimizer.step_num());
-            self.graph.optimize(
-                &mut self.optimizer,
-                &self.params.iter().cloned().collect(),
-                lr,
+            let lr = learning_rate(self.graph.optimizer_step());
+            self.graph.optimize(optimizer, lr)?;
+            if i % 10 == 0 {
+                self.sync()?;
+                callback(self)?;
+            }
+            println!(
+                "Step: {} Loss: {} (Elapsed: {}ms)",
+                self.graph.optimizer_step(),
+                avg_loss,
+                timer.elapsed().as_millis()
+            );
+        }
+        Ok(())
+    }
+
+    pub fn train<O: Optimizer, F: Fn(usize) -> f32, C: Fn(&mut Self) -> Result<(), GraphError>>(
+        &mut self,
+        dataset: &[usize],
+        num_batches: usize,
+        batch_size: usize,
+        limit: Option<usize>,
+        optimizer: &O,
+        learning_rate: F,
+        callback: C,
+    ) -> Result<(), GraphError> {
+        self.graph.load(self.pos_input, &self.pos_input_fixed)?;
+
+        for i in 0..num_batches {
+            let timer = Instant::now();
+            let mut rng = rand::thread_rng();
+            let (xs, ys) = sample_dataset(dataset, batch_size, self.num_tokens, &mut rng);
+
+            self.graph.load_usize(self.token_input, &xs)?;
+
+            self.graph.forward(true)?;
+            self.graph.zero_grad()?;
+            let err = self.graph.backward_all(
+                self.output,
+                CrossEntropy::new(self.vocab_size, ys.clone()),
+                limit,
             )?;
+            let lr = learning_rate(self.graph.optimizer_step());
+            self.graph.optimize(optimizer, lr)?;
             if i % 50 == 0 {
                 callback(self)?;
             }
             println!(
                 "Step: {} Loss: {} (Elapsed: {}ms)",
-                self.optimizer.step_num(),
-                avg_loss,
+                self.graph.optimizer_step(),
+                err,
                 timer.elapsed().as_millis()
             );
         }
@@ -426,14 +476,19 @@ impl<G: Graph, O: Optimizer> GPT<G, O> {
         for _ in 0..count {
             self.graph.load_usize(
                 self.token_input,
-                &Tensor::raw(&[self.num_tokens], context.clone())?,
+                &Tensor::raw(&[1, self.num_tokens], context.clone())?,
             )?;
 
             self.graph.forward(false)?;
             self.graph.fetch(self.output, false)?;
             let next_ch = select(
                 rng,
-                &self.graph.get(self.output)?.as_float()?.get(cnt - 1)?,
+                &self
+                    .graph
+                    .get(self.output)?
+                    .as_float()?
+                    .get(0)?
+                    .get(cnt - 1)?,
                 temperature,
             )?;
 

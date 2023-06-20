@@ -76,24 +76,10 @@ impl<V: TensorElement> Tensor<V> {
             shape: shape.to_vec(),
         })
     }
-    pub fn tril(n: usize) -> Self {
-        Tensor {
-            blob: (0..n * n)
-                .map(|i| if i % n <= i / n { V::one() } else { V::zero() })
-                .collect(),
-            shape: vec![n, n],
-        }
-    }
     pub fn scalar(v: V) -> Self {
         Tensor {
             blob: vec![v],
             shape: vec![],
-        }
-    }
-    pub fn vector(v: &[V]) -> Self {
-        Tensor {
-            blob: v.to_vec(),
-            shape: vec![v.len()],
         }
     }
     pub fn constant(shape: &[usize], value: V) -> Self {
@@ -104,9 +90,6 @@ impl<V: TensorElement> Tensor<V> {
     }
     pub fn zeros(shape: &[usize]) -> Self {
         Self::constant(shape, V::zero())
-    }
-    pub fn ones(shape: &[usize]) -> Self {
-        Self::constant(shape, V::one())
     }
     pub fn rand_range<R: Rng>(r: &mut R, start: f32, end: f32, shape: &[usize]) -> Tensor<f32> {
         Tensor::<f32> {

@@ -38,7 +38,7 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
         uint id = get_global_id(0);
         if(id < {works}) {{
             float val = a[id];
-            a_grad[id] = val > 0. ? out_grad[id] : out_grad[id] * 0.01;
+            a_grad[id] += val > 0. ? out_grad[id] : out_grad[id] * 0.01;
         }}
     }}"
     );

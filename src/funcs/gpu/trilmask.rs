@@ -52,8 +52,6 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>], n: usize) -> GpuFunctionG
                 for(uint j = 0; j < {n}; j++) {{
                     if(j <= i) {{
                         a_grad[i * {n} + j] += out_grad[i * {n} + j];
-                    }} else {{
-                        a_grad[i * {n} + j] = 0.;
                     }}
                 }}
             }}

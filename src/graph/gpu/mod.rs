@@ -2,6 +2,7 @@ pub mod program;
 use super::*;
 use crate::funcs::{GpuFunction, GpuFunctionGroup};
 use program::{Brand, Buffer, Device, Program, ProgramError};
+use std::collections::HashMap;
 
 pub enum GeneralBuffer {
     Float(Buffer<f32>),
@@ -22,6 +23,12 @@ impl GeneralBuffer {
         };
         buff.write_from(t)?;
         Ok(buff)
+    }
+    fn length(&self) -> usize {
+        match self {
+            GeneralBuffer::Float(b) => b.length(),
+            GeneralBuffer::Usize(b) => b.length(),
+        }
     }
     fn write_from(&mut self, t: &GeneralTensor) -> Result<(), GraphError> {
         match self {
@@ -100,8 +107,11 @@ pub struct GpuGraph {
     program: Option<CompiledGraph>,
     tensors: Vec<GpuTensor>,
     grads: Vec<GpuTensor>,
+    params: Vec<TensorId>,
     names: Vec<String>,
     computations: BTreeMap<TensorId, GpuComputation>,
+    optimizer_state: HashMap<String, GpuTensor>,
+    optimizer_step: usize,
 }
 
 impl GpuGraph {
@@ -113,6 +123,9 @@ impl GpuGraph {
             grads: Default::default(),
             computations: Default::default(),
             names: Default::default(),
+            params: Default::default(),
+            optimizer_state: Default::default(),
+            optimizer_step: 0,
             program: None,
         })
     }
@@ -130,7 +143,47 @@ impl GpuGraph {
                 src = src + &func.source_code;
             }
         }
+        src += "
+        __kernel void optimizer(__global float *param, __global float *grad, __global float *m, __global float *v,  float learning_rate, ulong step, ulong n) {
+            uint id = get_global_id(0);
+            param += id;
+            grad += id;
+            m += id;
+            v += id;
+            float beta1 = 0.9;
+            float beta2 = 0.999;
+            float weight_decay = 0.01;
+            if(id < n) {
+                *param = *param - *param * learning_rate * weight_decay;
+                *m = beta1 * (*m) + (1 - beta1) * (*grad);
+                *v = beta2 * (*v) + (1 - beta2) * (*grad) * (*grad);
+                float m_hat = *m / (1.0 - pow(beta1, step + 1));
+                float v_hat = *v / (1.0 - pow(beta2, step + 1));
+                float v_hat_sqrt_inv = learning_rate / (sqrt(v_hat) + 1e-8);
+                *param = *param - m_hat * v_hat_sqrt_inv;
+            }
+        }
+        ";
         let prog = Program::from_opencl(&self.device, &src)?;
+
+        let mut optimizer_state = HashMap::new();
+        for p in self.params.to_vec() {
+            let t = self.tensors.get(p).unwrap().mirror.shape().to_vec();
+            let m_val = GeneralTensor::Float(Tensor::zeros(&t));
+            let v_val = GeneralTensor::Float(Tensor::zeros(&t));
+            let m = GpuTensor {
+                buffer: Some(GeneralBuffer::new(&prog, &m_val)?),
+                mirror: m_val,
+                is_sync: true,
+            };
+            let v = GpuTensor {
+                buffer: Some(GeneralBuffer::new(&prog, &v_val)?),
+                mirror: v_val,
+                is_sync: true,
+            };
+            optimizer_state.insert(format!("{}_m", self.name_of(p)?), m);
+            optimizer_state.insert(format!("{}_v", self.name_of(p)?), v);
+        }
         for (v, g) in self.tensors.iter_mut().zip(self.grads.iter_mut()) {
             v.buffer = Some(GeneralBuffer::new(&prog, &v.mirror)?);
             g.buffer = Some(GeneralBuffer::new(&prog, &g.mirror)?);
@@ -138,6 +191,7 @@ impl GpuGraph {
             g.is_sync = true;
         }
         self.program = Some(CompiledGraph { program: prog });
+        self.optimizer_state = optimizer_state;
         Ok(())
     }
 }
@@ -187,7 +241,12 @@ impl Graph for GpuGraph {
         gt.is_sync = true;
         Ok(())
     }
-    fn alloc(&mut self, t: Tensor<f32>, name: String) -> Result<TensorId, GraphError> {
+    fn alloc(
+        &mut self,
+        t: Tensor<f32>,
+        is_param: bool,
+        name: String,
+    ) -> Result<TensorId, GraphError> {
         self.grads.push(GpuTensor {
             buffer: None,
             mirror: GeneralTensor::Float(Tensor::zeros(t.shape())),
@@ -200,6 +259,9 @@ impl Graph for GpuGraph {
         });
         self.names.push(name);
         let id = self.tensors.len() - 1;
+        if is_param {
+            self.params.push(id);
+        }
         Ok(id)
     }
     fn load<T: TensorOps<f32>>(
@@ -333,11 +395,9 @@ impl Graph for GpuGraph {
             }
         }
 
-        /*Ok(loss.mean())*/
-        //unimplemented!();
-        Ok(0.)
+        Ok(loss.mean())
     }
-    fn forward(&mut self, _training: bool) -> Result<(), GraphError> {
+    fn forward(&mut self, training: bool) -> Result<(), GraphError> {
         self.compile()?;
         let program = self.program.as_mut().ok_or(GraphError::NotReady)?;
         for (out, c) in self.computations.iter() {
@@ -347,15 +407,25 @@ impl Graph for GpuGraph {
                 .iter()
                 .map(|id| self.tensors.get(*id).ok_or(GraphError::TensorNotFound(*id)))
                 .collect::<Result<Vec<_>, GraphError>>()?;
+            let batches = self.tensors.get(*out).unwrap().mirror.shape()[0];
             let out_tensor = self
                 .tensors
                 .get(*out)
                 .ok_or(GraphError::TensorNotFound(*out))?;
 
+            let local_work_size = c.forward.local_work_size;
+            let mut global_work_size = if training {
+                c.forward.global_work_size
+            } else {
+                c.forward.global_work_size / batches
+            };
+            global_work_size +=
+                (local_work_size - (global_work_size % local_work_size)) % local_work_size;
+
             let mut kern = program.program.create_kernel(
                 &c.forward.kernel_name,
-                c.forward.global_work_size,
-                c.forward.local_work_size,
+                global_work_size,
+                local_work_size,
             );
             kern = kern.arg(out_tensor.buffer.as_ref().ok_or(GraphError::NotReady)?);
             for inp in inps.iter() {
@@ -363,7 +433,13 @@ impl Graph for GpuGraph {
             }
             kern.run()?;
 
-            self.tensors.get_mut(*out).unwrap().is_sync = false;
+            let gt = self.tensors.get_mut(*out).unwrap();
+            gt.is_sync = false;
+            /*gt.buffer
+                .as_mut()
+                .ok_or(GraphError::NotReady)?
+                .read_into(&mut gt.mirror)?;
+            println!("{}: {} ({})", &format!("{:?}", c.computation.func)[..3], beg.elapsed().as_millis(), c.forward.global_work_size);*/
         }
         Ok(())
     }
@@ -382,7 +458,7 @@ impl Graph for GpuGraph {
             .into_iter()
             .unzip();
         let out = f.run(&tensors, false)?;
-        let child = self.alloc(out, "".into())?;
+        let child = self.alloc(out, false, "".into())?;
         let forward = f.gpu_run(child, &shapes);
         let backward = f.gpu_grad(child, &shapes);
 
@@ -402,11 +478,71 @@ impl Graph for GpuGraph {
     }
     fn optimize<O: Optimizer>(
         &mut self,
-        _opt: &mut O,
-        _params: &HashSet<TensorId>,
-        _learning_rate: f32,
+        _optimizer: &O, // TODO: Generate OpenCL code with this
+        learning_rate: f32,
     ) -> Result<(), GraphError> {
-        unimplemented!();
+        self.compile()?;
+
+        for p in self.params.iter() {
+            self.tensors.get_mut(*p).unwrap().is_sync = false;
+        }
+
+        let program = self.program.as_mut().ok_or(GraphError::NotReady)?;
+
+        let tens: Vec<(
+            &GeneralBuffer,
+            &GeneralBuffer,
+            &GeneralBuffer,
+            &GeneralBuffer,
+        )> = self
+            .tensors
+            .iter_mut()
+            .enumerate()
+            .filter(|(id, _)| self.params.contains(id))
+            .map(|(id, params)| {
+                let name = self.names.get(id).ok_or(GraphError::TensorNotFound(id))?;
+                let grad = self.grads.get(id).ok_or(GraphError::TensorNotFound(id))?;
+                let m = self
+                    .optimizer_state
+                    .get(&format!("{}_m", name))
+                    .unwrap()
+                    .buffer
+                    .as_ref()
+                    .unwrap();
+                let v = self
+                    .optimizer_state
+                    .get(&format!("{}_v", name))
+                    .unwrap()
+                    .buffer
+                    .as_ref()
+                    .unwrap();
+                Ok((
+                    params.buffer.as_ref().ok_or(GraphError::NotReady)?,
+                    grad.buffer.as_ref().ok_or(GraphError::NotReady)?,
+                    m,
+                    v,
+                ))
+            })
+            .collect::<Result<Vec<_>, GraphError>>()?;
+        for (param, grad, m, v) in tens {
+            let works = param.length();
+            let local_work_size = 32;
+            let global_work_size =
+                works + ((local_work_size - (works % local_work_size)) % local_work_size);
+            let mut kern = program
+                .program
+                .create_kernel("optimizer", global_work_size, 32);
+            kern = kern.arg(param);
+            kern = kern.arg(grad);
+            kern = kern.arg(m);
+            kern = kern.arg(v);
+            kern = kern.arg(learning_rate);
+            kern = kern.arg(self.optimizer_step);
+            kern = kern.arg(works);
+            kern.run()?;
+        }
+        self.optimizer_step += 1;
+        Ok(())
     }
     fn fetch(&mut self, tensor_id: TensorId, grad: bool) -> Result<(), GraphError> {
         self.compile()?;
@@ -427,6 +563,62 @@ impl Graph for GpuGraph {
                     .read_into(&mut gg.mirror)?;
                 gg.is_sync = true;
             }
+        }
+        Ok(())
+    }
+    fn params(&self) -> &[TensorId] {
+        &self.params
+    }
+    fn optimizer_step(&self) -> usize {
+        self.optimizer_step
+    }
+    fn get_optimizer_state(&self) -> Result<OptimizerState, GraphError> {
+        let mut result = HashMap::new();
+        for p in self.params.iter() {
+            let name = self.name_of(*p)?;
+            let key_m = format!("{}_m", name);
+            let key_v = format!("{}_v", name);
+            let m = self.optimizer_state.get(&key_m).unwrap();
+            let v = self.optimizer_state.get(&key_v).unwrap();
+            let mut m_val = GeneralTensor::Float(Tensor::zeros(m.mirror.shape()));
+            let mut v_val = GeneralTensor::Float(Tensor::zeros(v.mirror.shape()));
+            m.buffer.as_ref().unwrap().read_into(&mut m_val)?;
+            v.buffer.as_ref().unwrap().read_into(&mut v_val)?;
+            result.insert(key_m, m_val.as_float()?.clone());
+            result.insert(key_v, v_val.as_float()?.clone());
+        }
+        Ok(OptimizerState {
+            step: self.optimizer_step,
+            state: result,
+        })
+    }
+    fn set_optimizer_state(&mut self, state: &OptimizerState) -> Result<(), GraphError> {
+        self.optimizer_step = state.step;
+        for p in self.params.iter() {
+            let name = self.name_of(*p)?;
+            let key_m = format!("{}_m", name);
+            let key_v = format!("{}_v", name);
+
+            let m = self
+                .optimizer_state
+                .get_mut(&key_m)
+                .unwrap()
+                .buffer
+                .as_mut()
+                .unwrap();
+            let m_val = GeneralTensor::Float(state.state.get(&key_m).unwrap().clone());
+            m.write_from(&m_val)?;
+            drop(m);
+
+            let v = self
+                .optimizer_state
+                .get_mut(&key_v)
+                .unwrap()
+                .buffer
+                .as_mut()
+                .unwrap();
+            let v_val = GeneralTensor::Float(state.state.get(&key_v).unwrap().clone());
+            v.write_from(&v_val)?;
         }
         Ok(())
     }

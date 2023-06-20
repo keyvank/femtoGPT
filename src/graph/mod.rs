@@ -2,16 +2,22 @@
 pub mod gpu;
 
 use crate::funcs::{Function, Loss};
-use crate::optimizer::Optimizer;
+use crate::optimizer::{Optimizer, OptimizerState};
 use crate::tensor::*;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use thiserror::Error;
 
 pub type TensorId = usize;
 
 pub trait Graph {
-    fn alloc(&mut self, t: Tensor<f32>, name: String) -> Result<TensorId, GraphError>;
+    fn alloc(
+        &mut self,
+        t: Tensor<f32>,
+        is_param: bool,
+        name: String,
+    ) -> Result<TensorId, GraphError>;
     fn alloc_usize(&mut self, t: Tensor<usize>, name: String) -> Result<TensorId, GraphError>;
+    fn params(&self) -> &[TensorId];
     fn load<T: TensorOps<f32>>(
         &mut self,
         tensor_id: TensorId,
@@ -46,10 +52,12 @@ pub trait Graph {
     ) -> Result<TensorId, GraphError>;
     fn optimize<O: Optimizer>(
         &mut self,
-        opt: &mut O,
-        params: &HashSet<TensorId>,
+        optimizer: &O,
         learning_rate: f32,
     ) -> Result<(), GraphError>;
+    fn optimizer_step(&self) -> usize;
+    fn get_optimizer_state(&self) -> Result<OptimizerState, GraphError>;
+    fn set_optimizer_state(&mut self, state: &OptimizerState) -> Result<(), GraphError>;
 }
 
 unsafe impl Send for CpuGraph {}
@@ -77,7 +85,9 @@ pub struct CpuGraph {
     tensors: Vec<GeneralTensor>,
     grads: Vec<Tensor<f32>>,
     names: Vec<String>,
+    params: Vec<TensorId>,
     computations: BTreeMap<TensorId, Computation>,
+    optimizer_state: OptimizerState,
 }
 
 #[derive(Error, Debug)]
@@ -133,11 +143,20 @@ impl Graph for CpuGraph {
         self.names.push(name);
         Ok(self.tensors.len() - 1)
     }
-    fn alloc(&mut self, t: Tensor<f32>, name: String) -> Result<TensorId, GraphError> {
+    fn alloc(
+        &mut self,
+        t: Tensor<f32>,
+        is_param: bool,
+        name: String,
+    ) -> Result<TensorId, GraphError> {
         self.grads.push(Tensor::zeros(t.shape()));
         self.tensors.push(GeneralTensor::Float(t));
         self.names.push(name);
-        Ok(self.tensors.len() - 1)
+        let id = self.tensors.len() - 1;
+        if is_param {
+            self.params.push(id);
+        }
+        Ok(id)
     }
     fn load<T: TensorOps<f32>>(
         &mut self,
@@ -232,7 +251,7 @@ impl Graph for CpuGraph {
             .map(|id| self.get(*id))
             .collect::<Result<Vec<_>, GraphError>>()?;
         let out = f.run(&tensors, false)?;
-        let child = self.alloc(out, "".into())?;
+        let child = self.alloc(out, false, "".into())?;
         self.computations.insert(
             child,
             Computation {
@@ -244,27 +263,42 @@ impl Graph for CpuGraph {
     }
     fn optimize<O: Optimizer>(
         &mut self,
-        opt: &mut O,
-        params: &HashSet<TensorId>,
+        optimizer: &O,
         learning_rate: f32,
     ) -> Result<(), GraphError> {
-        let (params, grads): (Vec<&mut Tensor<f32>>, Vec<&Tensor<f32>>) = self
+        let pg = self
             .tensors
             .iter_mut()
             .enumerate()
-            .filter(|(id, _)| params.contains(id))
+            .filter(|(id, _)| self.params.contains(id))
             .map(|(id, params)| {
+                let name = self
+                    .names
+                    .get(id)
+                    .cloned()
+                    .ok_or(GraphError::TensorNotFound(id))?;
                 let grad = self.grads.get(id).ok_or(GraphError::TensorNotFound(id))?;
-                Ok((params.as_float_mut()?, grad))
+                Ok((name, (params.as_float_mut()?, grad)))
             })
-            .collect::<Result<Vec<_>, GraphError>>()?
-            .into_iter()
-            .unzip();
-        opt.step(params, grads, learning_rate)?;
+            .collect::<Result<HashMap<String, (&mut Tensor<f32>, &Tensor<f32>)>, GraphError>>()?;
+        optimizer.step(pg, &mut self.optimizer_state, learning_rate)?;
         Ok(())
     }
     fn fetch(&mut self, _tensor_id: TensorId, _grad: bool) -> Result<(), GraphError> {
         // All tensors are ready by default in a CPU graph!
+        Ok(())
+    }
+    fn params(&self) -> &[TensorId] {
+        &self.params
+    }
+    fn optimizer_step(&self) -> usize {
+        self.optimizer_state.step
+    }
+    fn get_optimizer_state(&self) -> Result<OptimizerState, GraphError> {
+        Ok(self.optimizer_state.clone())
+    }
+    fn set_optimizer_state(&mut self, state: &OptimizerState) -> Result<(), GraphError> {
+        self.optimizer_state = state.clone();
         Ok(())
     }
 }
@@ -275,7 +309,9 @@ impl CpuGraph {
             tensors: Default::default(),
             grads: Default::default(),
             computations: Default::default(),
+            params: Default::default(),
             names: Default::default(),
+            optimizer_state: Default::default(),
         }
     }
 }

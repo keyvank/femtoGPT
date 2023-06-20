@@ -59,28 +59,31 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
                         __global float* coeff_grad,
                         __global float* bias,
                         __global float* bias_grad) {{
-        uint id = get_global_id(0);
+        uint wid = get_global_id(0);
+        uint id = wid / {n};
+        uint i = wid % {n};
+
         out += id * {n};
         out_grad += id * {n};
         inp += id * {n};
         inp_grad += id * {n};
         coeff_grad_temp += id * {n};
 
-        if(id < {works}) {{
-            for(uint i = 0; i < {n}; i++) {{
-                coeff_grad_temp[i] = (out[i] - bias[i]) * out_grad[i] / coeff[i];
+        if(wid < {works} * {n}) {{
+            for(uint ii = 0; ii < {n}; ii++) {{
+                coeff_grad_temp[ii] = (out[ii] - bias[ii]) * out_grad[ii] / coeff[ii];
             }}
 
             float n_inv = 1.0 / {n};
             float avg = 0.0;
-            for(uint i = 0; i < {n}; i++) {{
-                avg += inp[i];
+            for(uint ii = 0; ii < {n}; ii++) {{
+                avg += inp[ii];
             }}
             avg *= n_inv;
 
             float sigma2 = 0.0;
-            for(uint i = 0; i < {n}; i++) {{
-                sigma2 += (inp[i] - avg) * (inp[i] - avg);
+            for(uint ii = 0; ii < {n}; ii++) {{
+                sigma2 += (inp[ii] - avg) * (inp[ii] - avg);
             }}
             sigma2 *= n_inv;
             sigma2 += 0.00001;
@@ -89,15 +92,13 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
             float sigma = sqrt(sigma2);
             float sigma_inv = 1. / sigma;
 
-            for(uint i = 0; i < {n}; i++) {{
-                float a = inp[i];
-                for(uint j = 0; j < {n}; j++) {{
-                    if(i == j) {{
-                        inp_grad[i] += ((1. - n_inv) * sigma - (a - avg) * (a - avg) * sigma_inv * n_inv) * sigma2_inv * out_grad[j] * coeff[j];
-                    }} else {{
-                        float b = inp[j];
-                        inp_grad[i] += (-n_inv * sigma - (b - avg) * (a - avg) * sigma_inv * n_inv) * sigma2_inv * out_grad[j] * coeff[j];
-                    }}
+            float a = inp[i];
+            for(uint j = 0; j < {n}; j++) {{
+                if(i == j) {{
+                    inp_grad[i] += ((1. - n_inv) * sigma - (a - avg) * (a - avg) * sigma_inv * n_inv) * sigma2_inv * out_grad[j] * coeff[j];
+                }} else {{
+                    float b = inp[j];
+                    inp_grad[i] += (-n_inv * sigma - (b - avg) * (a - avg) * sigma_inv * n_inv) * sigma2_inv * out_grad[j] * coeff[j];
                 }}
             }}
         }}
@@ -127,7 +128,7 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
 
     let local_work_size = 32;
     let global_work_size =
-        works + ((local_work_size - (works % local_work_size)) % local_work_size);
+        works * n + ((local_work_size - (works * n % local_work_size)) % local_work_size);
 
     let local_work_size_2 = 32;
     let global_work_size_2 =

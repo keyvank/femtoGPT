@@ -51,20 +51,20 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
                         __global float* out_grad,
                         __global float* a,
                         __global float* a_grad) {{
-        uint id = get_global_id(0);
-        if(id < {works}) {{
+        uint wid = get_global_id(0);
+        uint id = wid / {n};
+        uint i = wid % {n};
+        if(wid < {works} * {n}) {{
             out += id * {n};
             out_grad += id * {n};
             a_grad += id * {n};
-            for(uint i = 0; i < {n}; i++) {{
-                float si = out[i];
-                for(uint j = 0; j < {n}; j++) {{
-                    if(i == j) {{
-                        a_grad[i] += si * (1. - si) * out_grad[j];
-                    }} else {{
-                        float sj = out[j];
-                        a_grad[i] += -si * sj * out_grad[j];
-                    }}
+            float si = out[i];
+            for(uint j = 0; j < {n}; j++) {{
+                if(i == j) {{
+                    a_grad[i] += si * (1. - si) * out_grad[j];
+                }} else {{
+                    float sj = out[j];
+                    a_grad[i] += -si * sj * out_grad[j];
                 }}
             }}
         }}
@@ -73,7 +73,7 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
 
     let local_work_size = 32;
     let global_work_size =
-        works + ((local_work_size - (works % local_work_size)) % local_work_size);
+        works * n + ((local_work_size - (works * n % local_work_size)) % local_work_size);
 
     GpuFunctionGroup {
         funcs: vec![GpuFunction {

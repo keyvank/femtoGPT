@@ -7,26 +7,27 @@ pub fn gpu_run(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
     let m = inps[0][inps[0].len() - 2];
     let n = inps[0][inps[0].len() - 1];
     let p = inps[1][inps[1].len() - 1];
-    let works = std::cmp::max(inp0_size, inp1_size);
+    let mp = m * p;
+    let works = std::cmp::max(inp0_size, inp1_size) * m * p;
     let source_code = format!(
         "__kernel void calc_{out_id}(
                         __global float* out,
                         __global float* a,
                         __global float* b) {{
-        uint id = get_global_id(0);
+        uint wid = get_global_id(0);
+        uint id = wid / {mp};
         uint id_a = id % {inp0_size};
         uint id_b = id % {inp1_size};
-        if(id < {works}) {{
+        uint ij = wid % {mp};
+        uint i = ij / {p};
+        uint j = ij % {p};
+        if(wid < {works}) {{
             out += {m} * {p} * id;
             a += {m} * {n} * id_a;
             b += {n} * {p} * id_b;
-            for(uint i = 0; i < {m} * {p}; i++) out[i] = 0.;
-            for(uint i = 0; i < {m}; i++) {{
-                for(uint k = 0; k < {n}; k++) {{
-                    for(uint j = 0; j < {p}; j++) {{
-                        out[i * {p} + j] += a[i * {n} + k] * b[{p} * k + j];
-                    }}
-                }}
+            out[ij] = 0.0;
+            for(uint k = 0; k < {n}; k++) {{
+                out[i * {p} + j] += a[i * {n} + k] * b[{p} * k + j];
             }}
         }}
     }}"
@@ -55,7 +56,8 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
     let mp = m * p;
     let mn = m * n;
     let np = n * p;
-    let works = std::cmp::max(inp0_size, inp1_size);
+    let mats = std::cmp::max(inp0_size, inp1_size);
+    let works_1 = mats * mn;
     let source_code = format!(
         "__kernel void grad_{out_id}_1(
                         __global float* out,
@@ -65,35 +67,30 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
                         __global float* a_grad,
                         __global float* b,
                         __global float* b_grad) {{
-        uint id = get_global_id(0);
+        uint wid = get_global_id(0);
+        uint id = wid / {mn};
         uint id_a = id % {inp0_size};
         uint id_b = id % {inp1_size};
-        if(id < {works}) {{
+        uint ik = wid % {mn};
+        uint i = ik / {n};
+        uint k = ik % {n};
+        if(wid < {works_1}) {{
             out += {mp} * id;
             out_grad += {mp} * id;
             a += {mn} * id_a;
             a_grad += {mn} * id_a;
             b += {np} * id_b;
-            float *gb = grad_buff + {np} * id;
-
-            for(uint i = 0; i < {np}; i++) {{
-                gb[i] = 0.0;
-            }}
 
             // a_grad = (out_grad ^ b_T) -> mp * pn
             // b_grad = (a_T ^ out_grad) -> nm * mp
-            for(uint i = 0; i < {m}; i++) {{
-                for(uint j = 0; j < {p}; j++) {{
-                    for(uint k = 0; k < {n}; k++) {{
-                        a_grad[i * {n} + k] += out_grad[i * {p} + j] * b[k * {p} + j];
-                        gb[k * {p} + j] += a[i * {n} + k] * out_grad[i * {p} + j];
-                    }}
-                }}
+            for(uint j = 0; j < {p}; j++) {{
+                a_grad[i * {n} + k] += out_grad[i * {p} + j] * b[k * {p} + j];
             }}
         }}
     }}"
     );
 
+    let works_2 = mats * np;
     let source_code_2 = format!(
         "__kernel void grad_{out_id}_2(
                         __global float* out,
@@ -103,29 +100,72 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
                         __global float* a_grad,
                         __global float* b,
                         __global float* b_grad) {{
+        uint wid = get_global_id(0);
+        uint id = wid / {np};
+        uint id_a = id % {inp0_size};
+        uint id_b = id % {inp1_size};
+        uint kj = wid % {np};
+        uint k = kj / {p};
+        uint j = kj % {p};
+        if(id < {works_2}) {{
+            out += {mp} * id;
+            out_grad += {mp} * id;
+            a += {mn} * id_a;
+            a_grad += {mn} * id_a;
+            b += {np} * id_b;
+            float *gb = grad_buff + {np} * id;
+
+            gb[k * {p} + j] = 0.0;
+
+            // a_grad = (out_grad ^ b_T) -> mp * pn
+            // b_grad = (a_T ^ out_grad) -> nm * mp
+            for(uint i = 0; i < {m}; i++) {{
+                gb[k * {p} + j] += a[i * {n} + k] * out_grad[i * {p} + j];
+            }}
+        }}
+    }}"
+    );
+
+    let inp1_mats = mats / inp1_size;
+    let inp1_total = inp1_size * np;
+    let source_code_3 = format!(
+        "__kernel void grad_{out_id}_3(
+                        __global float* out,
+                        __global float* out_grad,
+                        __global float* grad_buff,
+                        __global float* a,
+                        __global float* a_grad,
+                        __global float* b,
+                        __global float* b_grad) {{
         uint id = get_global_id(0);
-        if(id < {np}) {{
-            for(uint i = 0; i < {works}; i++) {{
-                b_grad[id] += grad_buff[i * {np} + id];
+        if(id < {inp1_total}) {{
+            for(uint i = 0; i < {inp1_mats}; i++) {{
+                b_grad[id] += grad_buff[i * {inp1_total} + id];
             }}
         }}
     }}"
     );
 
     GpuFunctionGroup {
-        shared_buffers: vec![np * works],
+        shared_buffers: vec![np * mats],
         funcs: vec![
             GpuFunction {
                 source_code,
                 kernel_name: format!("grad_{}_1", out_id),
                 local_work_size: 32,
-                global_work_size: works + ((32 - (works % 32)) % 32),
+                global_work_size: works_1 + ((32 - (works_1 % 32)) % 32),
             },
             GpuFunction {
                 source_code: source_code_2,
                 kernel_name: format!("grad_{}_2", out_id),
                 local_work_size: 32,
-                global_work_size: np + ((32 - (np % 32)) % 32),
+                global_work_size: works_2 + ((32 - (works_2 % 32)) % 32),
+            },
+            GpuFunction {
+                source_code: source_code_3,
+                kernel_name: format!("grad_{}_3", out_id),
+                local_work_size: 32,
+                global_work_size: inp1_total + ((32 - (inp1_total % 32)) % 32),
             },
         ],
     }

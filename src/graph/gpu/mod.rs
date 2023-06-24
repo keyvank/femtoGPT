@@ -1,6 +1,6 @@
 pub mod program;
 use super::*;
-use crate::funcs::{GpuFunction, GpuFunctionGroup};
+use crate::funcs::GpuFunctionGroup;
 use program::{Brand, Buffer, Device, Program, ProgramError};
 use std::collections::HashMap;
 
@@ -94,12 +94,12 @@ impl<'a> program::KernelArgument<'a> for &'a GeneralBuffer {
 #[derive(Clone)]
 pub struct GpuComputation {
     computation: Computation,
-    forward: GpuFunction,
-    backward: GpuFunctionGroup,
+    gpu_function: GpuFunctionGroup,
 }
 
 pub struct CompiledGraph {
     program: Program,
+    comp_buffers: HashMap<TensorId, Vec<GeneralBuffer>>,
 }
 
 pub struct GpuGraph {
@@ -138,8 +138,10 @@ impl GpuGraph {
         }
         let mut src = String::new();
         for comp in self.computations.values() {
-            src = src + &comp.forward.source_code;
-            for func in comp.backward.funcs.iter() {
+            for func in comp.gpu_function.forward_funcs.iter() {
+                src = src + &func.source_code;
+            }
+            for func in comp.gpu_function.funcs.iter() {
                 src = src + &func.source_code;
             }
         }
@@ -166,6 +168,22 @@ impl GpuGraph {
         ";
         let prog = Program::from_opencl(&self.device, &src)?;
 
+        let mut comp_buffers = HashMap::new();
+
+        for (id, comp) in self.computations.iter() {
+            comp_buffers.entry(*id).or_insert_with(|| {
+                comp.gpu_function
+                    .shared_buffers
+                    .iter()
+                    .map(|sz| {
+                        prog.create_buffer::<f32>(*sz)
+                            .map(|b| GeneralBuffer::Float(b))
+                    })
+                    .collect::<Result<Vec<_>, ProgramError>>()
+                    .unwrap()
+            });
+        }
+
         let mut optimizer_state = HashMap::new();
         for p in self.params.to_vec() {
             let t = self.tensors.get(p).unwrap().mirror.shape().to_vec();
@@ -190,7 +208,10 @@ impl GpuGraph {
             v.is_sync = true;
             g.is_sync = true;
         }
-        self.program = Some(CompiledGraph { program: prog });
+        self.program = Some(CompiledGraph {
+            program: prog,
+            comp_buffers,
+        });
         self.optimizer_state = optimizer_state;
         Ok(())
     }
@@ -365,14 +386,10 @@ impl Graph for GpuGraph {
                 .buffer
                 .as_ref()
                 .ok_or(GraphError::NotReady)?;
-            let buffs = c
-                .backward
-                .shared_buffers
-                .iter()
-                .map(|sz| program.program.create_buffer::<f32>(*sz))
-                .collect::<Result<Vec<_>, ProgramError>>()?;
 
-            for k in c.backward.funcs.iter() {
+            let buffs = program.comp_buffers.get(id).ok_or(GraphError::NotReady)?;
+
+            for k in c.gpu_function.funcs.iter() {
                 let mut kern = program.program.create_kernel(
                     &k.kernel_name,
                     k.global_work_size,
@@ -413,25 +430,32 @@ impl Graph for GpuGraph {
                 .get(*out)
                 .ok_or(GraphError::TensorNotFound(*out))?;
 
-            let local_work_size = c.forward.local_work_size;
-            let mut global_work_size = if training {
-                c.forward.global_work_size
-            } else {
-                c.forward.global_work_size / batches
-            };
-            global_work_size +=
-                (local_work_size - (global_work_size % local_work_size)) % local_work_size;
+            let buffs = program.comp_buffers.get(out).ok_or(GraphError::NotReady)?;
 
-            let mut kern = program.program.create_kernel(
-                &c.forward.kernel_name,
-                global_work_size,
-                local_work_size,
-            );
-            kern = kern.arg(out_tensor.buffer.as_ref().ok_or(GraphError::NotReady)?);
-            for inp in inps.iter() {
-                kern = kern.arg(inp.buffer.as_ref().ok_or(GraphError::NotReady)?);
+            for func in c.gpu_function.forward_funcs.iter() {
+                let local_work_size = func.local_work_size;
+                let mut global_work_size = if training {
+                    func.global_work_size
+                } else {
+                    func.global_work_size / batches
+                };
+                global_work_size +=
+                    (local_work_size - (global_work_size % local_work_size)) % local_work_size;
+
+                let mut kern = program.program.create_kernel(
+                    &func.kernel_name,
+                    global_work_size,
+                    local_work_size,
+                );
+                kern = kern.arg(out_tensor.buffer.as_ref().ok_or(GraphError::NotReady)?);
+                for buff in buffs.iter() {
+                    kern = kern.arg(buff);
+                }
+                for inp in inps.iter() {
+                    kern = kern.arg(inp.buffer.as_ref().ok_or(GraphError::NotReady)?);
+                }
+                kern.run()?;
             }
-            kern.run()?;
 
             let gt = self.tensors.get_mut(*out).unwrap();
             gt.is_sync = false;
@@ -459,8 +483,7 @@ impl Graph for GpuGraph {
             .unzip();
         let out = f.run(&tensors, false)?;
         let child = self.alloc(out, false, "".into())?;
-        let forward = f.gpu_run(child, &shapes);
-        let backward = f.gpu_grad(child, &shapes);
+        let gpu_function = f.gpu_grad(child, &shapes);
 
         self.computations.insert(
             child,
@@ -469,8 +492,7 @@ impl Graph for GpuGraph {
                     func: f,
                     inps: tensor_ids.to_vec(),
                 },
-                forward,
-                backward,
+                gpu_function,
             },
         );
         self.program = None; // Needs recompile

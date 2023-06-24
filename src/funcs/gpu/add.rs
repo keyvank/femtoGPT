@@ -1,12 +1,16 @@
 use super::*;
 
-pub fn gpu_run(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
+pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
     let inp0_size = inps[0].iter().fold(1, |a, b| a * b);
     let inp1_size = inps[1].iter().fold(1, |a, b| a * b);
+    assert!(inp1_size <= inp0_size);
+    let repeats = inp0_size / inp1_size;
     let works = std::cmp::max(inp0_size, inp1_size);
-    let source_code = format!(
+
+    let forward_source_code = format!(
         "__kernel void calc_{out_id}(
                         __global float* out,
+                        __global float* grad_buff,
                         __global float* a,
                         __global float* b) {{
         uint id = get_global_id(0);
@@ -18,24 +22,6 @@ pub fn gpu_run(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
     }}"
     );
 
-    let local_work_size = 32;
-    let global_work_size =
-        works + ((local_work_size - (works % local_work_size)) % local_work_size);
-
-    GpuFunction {
-        source_code,
-        kernel_name: format!("calc_{}", out_id),
-        local_work_size,
-        global_work_size,
-    }
-}
-
-pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
-    let inp0_size = inps[0].iter().fold(1, |a, b| a * b);
-    let inp1_size = inps[1].iter().fold(1, |a, b| a * b);
-    assert!(inp1_size <= inp0_size);
-    let repeats = inp0_size / inp1_size;
-    let works = std::cmp::max(inp0_size, inp1_size);
     let source_code = format!(
         "__kernel void grad_{out_id}_1(
                         __global float* out,
@@ -72,6 +58,12 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
 
     GpuFunctionGroup {
         shared_buffers: vec![works],
+        forward_funcs: vec![GpuFunction {
+            source_code: forward_source_code,
+            kernel_name: format!("calc_{}", out_id),
+            local_work_size: 32,
+            global_work_size: works + ((32 - (works % 32)) % 32),
+        }],
         funcs: vec![
             GpuFunction {
                 source_code,

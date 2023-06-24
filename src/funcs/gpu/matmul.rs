@@ -1,50 +1,5 @@
 use super::*;
 
-pub fn gpu_run(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
-    let inp0_size = inps[0][..inps[0].len() - 2].iter().fold(1, |a, b| a * b);
-    let inp1_size = inps[1][..inps[1].len() - 2].iter().fold(1, |a, b| a * b);
-    assert_eq!(inps[0][inps[0].len() - 1], inps[1][inps[1].len() - 2]);
-    let m = inps[0][inps[0].len() - 2];
-    let n = inps[0][inps[0].len() - 1];
-    let p = inps[1][inps[1].len() - 1];
-    let mp = m * p;
-    let works = std::cmp::max(inp0_size, inp1_size) * m * p;
-    let source_code = format!(
-        "__kernel void calc_{out_id}(
-                        __global float* out,
-                        __global float* a,
-                        __global float* b) {{
-        uint wid = get_global_id(0);
-        uint id = wid / {mp};
-        uint id_a = id % {inp0_size};
-        uint id_b = id % {inp1_size};
-        uint ij = wid % {mp};
-        uint i = ij / {p};
-        uint j = ij % {p};
-        if(wid < {works}) {{
-            out += {m} * {p} * id;
-            a += {m} * {n} * id_a;
-            b += {n} * {p} * id_b;
-            out[ij] = 0.0;
-            for(uint k = 0; k < {n}; k++) {{
-                out[i * {p} + j] += a[i * {n} + k] * b[{p} * k + j];
-            }}
-        }}
-    }}"
-    );
-
-    let local_work_size = 32;
-    let global_work_size =
-        works + ((local_work_size - (works % local_work_size)) % local_work_size);
-
-    GpuFunction {
-        source_code,
-        kernel_name: format!("calc_{}", out_id),
-        local_work_size,
-        global_work_size,
-    }
-}
-
 pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
     let inp0_size = inps[0][..inps[0].len() - 2].iter().fold(1, |a, b| a * b);
     let inp1_size = inps[1][..inps[1].len() - 2].iter().fold(1, |a, b| a * b);
@@ -57,6 +12,37 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
     let mn = m * n;
     let np = n * p;
     let mats = std::cmp::max(inp0_size, inp1_size);
+
+    let works_forward = std::cmp::max(inp0_size, inp1_size) * m * p;
+    let forward_source_code = format!(
+        "__kernel void calc_{out_id}(
+                        __global float* out,
+                        __global float* grad_buff,
+                        __global float* a,
+                        __global float* b) {{
+        uint wid = get_global_id(0);
+        uint id = wid / {mp};
+        uint id_a = id % {inp0_size};
+        uint id_b = id % {inp1_size};
+        uint ij = wid % {mp};
+        uint i = ij / {p};
+        uint j = ij % {p};
+        if(wid < {works_forward}) {{
+            out += {m} * {p} * id;
+            a += {m} * {n} * id_a;
+            b += {n} * {p} * id_b;
+            out[ij] = 0.0;
+            for(uint k = 0; k < {n}; k++) {{
+                out[i * {p} + j] += a[i * {n} + k] * b[{p} * k + j];
+            }}
+        }}
+    }}"
+    );
+
+    let local_work_size = 32;
+    let forward_global_work_size =
+        works_forward + ((local_work_size - (works_forward % local_work_size)) % local_work_size);
+
     let works_1 = mats * mn;
     let source_code = format!(
         "__kernel void grad_{out_id}_1(
@@ -148,6 +134,12 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
 
     GpuFunctionGroup {
         shared_buffers: vec![np * mats],
+        forward_funcs: vec![GpuFunction {
+            source_code: forward_source_code,
+            kernel_name: format!("calc_{}", out_id),
+            local_work_size,
+            global_work_size: forward_global_work_size,
+        }],
         funcs: vec![
             GpuFunction {
                 source_code,

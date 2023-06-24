@@ -49,14 +49,7 @@ pub trait Function: std::fmt::Debug {
     ) -> Result<Vec<Tensor<f32>>, TensorError>;
 
     #[cfg(feature = "gpu")]
-    fn gpu_run(&self, _out_id: TensorId, _inp_shapes: &[Vec<usize>]) -> GpuFunction {
-        unimplemented!()
-    }
-
-    #[cfg(feature = "gpu")]
-    fn gpu_grad(&self, _out_id: TensorId, _inp_shapes: &[Vec<usize>]) -> GpuFunctionGroup {
-        unimplemented!()
-    }
+    fn gpu_grad(&self, _out_id: TensorId, _inp_shapes: &[Vec<usize>]) -> GpuFunctionGroup;
 }
 
 pub trait Loss: std::fmt::Debug {

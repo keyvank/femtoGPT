@@ -118,7 +118,7 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
             local_work_size: 32,
             global_work_size: works,
         }],
-        funcs: vec![
+        backward_funcs: vec![
             GpuFunction {
                 source_code,
                 kernel_name: format!("grad_{}_0", out_id),

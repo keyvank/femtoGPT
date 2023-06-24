@@ -141,7 +141,7 @@ impl GpuGraph {
             for func in comp.gpu_function.forward_funcs.iter() {
                 src = src + &func.source_code;
             }
-            for func in comp.gpu_function.funcs.iter() {
+            for func in comp.gpu_function.backward_funcs.iter() {
                 src = src + &func.source_code;
             }
         }
@@ -389,7 +389,7 @@ impl Graph for GpuGraph {
 
             let buffs = program.comp_buffers.get(id).ok_or(GraphError::NotReady)?;
 
-            for k in c.gpu_function.funcs.iter() {
+            for k in c.gpu_function.backward_funcs.iter() {
                 let mut kern = program.program.create_kernel(
                     &k.kernel_name,
                     k.global_work_size,

@@ -15,8 +15,8 @@ use crate::graph::TensorId;
 #[derive(Clone, Debug)]
 pub struct GpuFunctionGroup {
     pub shared_buffers: Vec<usize>,
-    pub funcs: Vec<GpuFunction>,
     pub forward_funcs: Vec<GpuFunction>,
+    pub backward_funcs: Vec<GpuFunction>,
 }
 
 #[derive(Clone, Debug)]

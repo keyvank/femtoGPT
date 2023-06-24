@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
+pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
     let n = inps[0][inps[0].len() - 1];
     let works = inps[0][..inps[0].len() - 1].iter().fold(1, |a, b| a * b);
 
@@ -111,21 +111,21 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
     }}"
     );
 
-    GpuFunctionGroup {
-        forward_funcs: vec![GpuFunction {
+    GpuFunction {
+        forward_funcs: vec![KernelCall {
             source_code: forward_source_code,
             kernel_name: format!("calc_{}", out_id),
             local_work_size: 32,
             global_work_size: works,
         }],
         backward_funcs: vec![
-            GpuFunction {
+            KernelCall {
                 source_code,
                 kernel_name: format!("grad_{}_0", out_id),
                 local_work_size: 32,
                 global_work_size: works * n,
             },
-            GpuFunction {
+            KernelCall {
                 source_code: source_code_2,
                 kernel_name: format!("grad_{}_1", out_id),
                 local_work_size: 32,

@@ -5,7 +5,7 @@ use crate::graph::TensorId;
 mod gpu;
 
 #[cfg(feature = "gpu")]
-pub use gpu::{GpuFunction, GpuFunctionGroup};
+pub use gpu::{GpuFunction, KernelCall};
 
 mod add;
 mod cat;
@@ -49,7 +49,7 @@ pub trait Function: std::fmt::Debug {
     ) -> Result<Vec<Tensor<f32>>, TensorError>;
 
     #[cfg(feature = "gpu")]
-    fn gpu_impl(&self, _out_id: TensorId, _inp_shapes: &[Vec<usize>]) -> GpuFunctionGroup;
+    fn gpu_impl(&self, _out_id: TensorId, _inp_shapes: &[Vec<usize>]) -> GpuFunction;
 }
 
 pub trait Loss: std::fmt::Debug {

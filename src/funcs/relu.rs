@@ -2,7 +2,7 @@ use super::Function;
 use crate::tensor::*;
 
 #[cfg(feature = "gpu")]
-use super::{gpu, GpuFunctionGroup, TensorId};
+use super::{gpu, GpuFunction, TensorId};
 
 #[derive(Debug, Clone)]
 pub struct Relu;
@@ -40,7 +40,7 @@ impl Function for Relu {
     }
 
     #[cfg(feature = "gpu")]
-    fn gpu_impl(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
+    fn gpu_impl(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
         gpu::relu::gpu_impl(out_id, inps)
     }
 }

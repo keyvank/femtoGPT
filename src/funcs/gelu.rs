@@ -2,7 +2,7 @@ use super::Function;
 use crate::tensor::*;
 
 #[cfg(feature = "gpu")]
-use super::{GpuFunctionGroup, TensorId};
+use super::{GpuFunction, TensorId};
 
 const SQRT_2_OVER_PI: f32 = 0.7978845608;
 const GELU_CONST: f32 = 0.044715;
@@ -48,7 +48,7 @@ impl Function for Gelu {
     }
 
     #[cfg(feature = "gpu")]
-    fn gpu_impl(&self, _out_id: TensorId, _inps: &[Vec<usize>]) -> GpuFunctionGroup {
+    fn gpu_impl(&self, _out_id: TensorId, _inps: &[Vec<usize>]) -> GpuFunction {
         unimplemented!()
     }
 }

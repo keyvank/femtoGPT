@@ -13,14 +13,14 @@ pub mod trilmask;
 use crate::graph::TensorId;
 
 #[derive(Clone, Debug)]
-pub struct GpuFunctionGroup {
+pub struct GpuFunction {
     pub shared_buffers: Vec<usize>,
-    pub forward_funcs: Vec<GpuFunction>,
-    pub backward_funcs: Vec<GpuFunction>,
+    pub forward_funcs: Vec<KernelCall>,
+    pub backward_funcs: Vec<KernelCall>,
 }
 
 #[derive(Clone, Debug)]
-pub struct GpuFunction {
+pub struct KernelCall {
     pub source_code: String,
     pub kernel_name: String,
     pub global_work_size: usize,

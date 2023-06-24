@@ -1,6 +1,6 @@
 pub mod program;
 use super::*;
-use crate::funcs::GpuFunctionGroup;
+use crate::funcs::GpuFunction;
 use program::{Brand, Buffer, Device, Program, ProgramError};
 use std::collections::HashMap;
 
@@ -94,7 +94,7 @@ impl<'a> program::KernelArgument<'a> for &'a GeneralBuffer {
 #[derive(Clone)]
 pub struct GpuComputation {
     computation: Computation,
-    gpu_function: GpuFunctionGroup,
+    gpu_function: GpuFunction,
 }
 
 pub struct CompiledGraph {

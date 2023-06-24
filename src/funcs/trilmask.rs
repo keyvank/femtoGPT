@@ -56,7 +56,7 @@ impl Function for TrilMask {
     }
 
     #[cfg(feature = "gpu")]
-    fn gpu_grad(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
-        gpu::trilmask::gpu_grad(out_id, inps, self.n)
+    fn gpu_impl(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
+        gpu::trilmask::gpu_impl(out_id, inps, self.n)
     }
 }

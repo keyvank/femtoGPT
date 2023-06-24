@@ -483,7 +483,7 @@ impl Graph for GpuGraph {
             .unzip();
         let out = f.run(&tensors, false)?;
         let child = self.alloc(out, false, "".into())?;
-        let gpu_function = f.gpu_grad(child, &shapes);
+        let gpu_function = f.gpu_impl(child, &shapes);
 
         self.computations.insert(
             child,

@@ -82,7 +82,7 @@ impl Function for Cat {
     }
 
     #[cfg(feature = "gpu")]
-    fn gpu_grad(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
-        gpu::cat::gpu_grad(out_id, inps)
+    fn gpu_impl(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
+        gpu::cat::gpu_impl(out_id, inps)
     }
 }

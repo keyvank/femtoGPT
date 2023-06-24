@@ -7,7 +7,7 @@ pub enum Brand {
 impl Brand {
     pub fn platform_name(&self) -> &'static str {
         match self {
-            Brand::Nvidia => "NVIDIA CUDA",
+            Brand::Nvidia => "Intel(R) CPU Runtime for OpenCL(TM) Applications",
             Brand::Amd => "AMD Accelerated Parallel Processing",
         }
     }
@@ -64,7 +64,7 @@ impl Device {
                         Ok(Device {
                             brand,
                             name: d.name()?,
-                            bus_id: brand.get_bus_id(d)?,
+                            bus_id: 0, //brand.get_bus_id(d)?,
                             platform: plat,
                             device: d,
                         })
@@ -103,10 +103,8 @@ impl Program {
         //    let bin = std::fs::read(cached)?;
         //    Program::from_binary(device, bin)
         //} else {
-        let context = ocl::Context::builder()
-            .platform(device.platform)
-            .devices(device.device)
-            .build()?;
+        println!("{:?} {:?}", device.platform, device.device);
+        let context = ocl::Context::builder().platform(device.platform).build()?;
         let program = ocl::Program::builder()
             .src(src)
             .devices(ocl::builders::DeviceSpecifier::Single(device.device))

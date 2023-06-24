@@ -33,7 +33,7 @@ impl Function for Coeff {
     }
 
     #[cfg(feature = "gpu")]
-    fn gpu_grad(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
-        gpu::coeff::gpu_grad(out_id, inps, self.coeff)
+    fn gpu_impl(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
+        gpu::coeff::gpu_impl(out_id, inps, self.coeff)
     }
 }

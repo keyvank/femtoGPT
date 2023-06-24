@@ -48,7 +48,7 @@ impl Function for Gelu {
     }
 
     #[cfg(feature = "gpu")]
-    fn gpu_grad(&self, _out_id: TensorId, _inps: &[Vec<usize>]) -> GpuFunctionGroup {
+    fn gpu_impl(&self, _out_id: TensorId, _inps: &[Vec<usize>]) -> GpuFunctionGroup {
         unimplemented!()
     }
 }

@@ -40,7 +40,7 @@ impl Function for Relu {
     }
 
     #[cfg(feature = "gpu")]
-    fn gpu_grad(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
-        gpu::relu::gpu_grad(out_id, inps)
+    fn gpu_impl(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
+        gpu::relu::gpu_impl(out_id, inps)
     }
 }

@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
+pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
     let inp0_size = inps[0].iter().fold(1, |a, b| a * b);
     let inp1_size = inps[1].iter().fold(1, |a, b| a * b);
     assert!(inp1_size <= inp0_size);
@@ -62,20 +62,20 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
             source_code: forward_source_code,
             kernel_name: format!("calc_{}", out_id),
             local_work_size: 32,
-            global_work_size: works + ((32 - (works % 32)) % 32),
+            global_work_size: works,
         }],
         funcs: vec![
             GpuFunction {
                 source_code,
                 kernel_name: format!("grad_{}_1", out_id),
                 local_work_size: 32,
-                global_work_size: works + ((32 - (works % 32)) % 32),
+                global_work_size: works,
             },
             GpuFunction {
                 source_code: source_code_2,
                 kernel_name: format!("grad_{}_2", out_id),
                 local_work_size: 32,
-                global_work_size: inp1_size + ((32 - (inp1_size % 32)) % 32),
+                global_work_size: inp1_size,
             },
         ],
     }

@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
+pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
     let inp0_size = inps[0][..inps[0].len() - 2].iter().fold(1, |a, b| a * b);
     let inp1_size = inps[1][..inps[1].len() - 2].iter().fold(1, |a, b| a * b);
     assert!(inp1_size <= inp0_size);
@@ -38,10 +38,6 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
         }}
     }}"
     );
-
-    let local_work_size = 32;
-    let forward_global_work_size =
-        works_forward + ((local_work_size - (works_forward % local_work_size)) % local_work_size);
 
     let works_1 = mats * mn;
     let source_code = format!(
@@ -137,27 +133,27 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
         forward_funcs: vec![GpuFunction {
             source_code: forward_source_code,
             kernel_name: format!("calc_{}", out_id),
-            local_work_size,
-            global_work_size: forward_global_work_size,
+            local_work_size: 32,
+            global_work_size: works_forward,
         }],
         funcs: vec![
             GpuFunction {
                 source_code,
                 kernel_name: format!("grad_{}_1", out_id),
                 local_work_size: 32,
-                global_work_size: works_1 + ((32 - (works_1 % 32)) % 32),
+                global_work_size: works_1,
             },
             GpuFunction {
                 source_code: source_code_2,
                 kernel_name: format!("grad_{}_2", out_id),
                 local_work_size: 32,
-                global_work_size: works_2 + ((32 - (works_2 % 32)) % 32),
+                global_work_size: works_2,
             },
             GpuFunction {
                 source_code: source_code_3,
                 kernel_name: format!("grad_{}_3", out_id),
                 local_work_size: 32,
-                global_work_size: inp1_total + ((32 - (inp1_total % 32)) % 32),
+                global_work_size: inp1_total,
             },
         ],
     }

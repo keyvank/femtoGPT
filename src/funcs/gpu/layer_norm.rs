@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
+pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
     let n = inps[0][inps[0].len() - 1];
     let works = inps[0][..inps[0].len() - 1].iter().fold(1, |a, b| a * b);
 
@@ -111,36 +111,25 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
     }}"
     );
 
-    let local_work_size = 32;
-    let global_work_size =
-        works * n + ((local_work_size - (works * n % local_work_size)) % local_work_size);
-
-    let local_work_size_2 = 32;
-    let global_work_size_2 =
-        n + ((local_work_size_2 - (n % local_work_size_2)) % local_work_size_2);
-
-    let forward_global_work_size =
-        works + ((local_work_size - (works % local_work_size)) % local_work_size);
-
     GpuFunctionGroup {
         forward_funcs: vec![GpuFunction {
             source_code: forward_source_code,
             kernel_name: format!("calc_{}", out_id),
-            local_work_size,
-            global_work_size: forward_global_work_size,
+            local_work_size: 32,
+            global_work_size: works,
         }],
         funcs: vec![
             GpuFunction {
                 source_code,
                 kernel_name: format!("grad_{}_0", out_id),
-                local_work_size,
-                global_work_size,
+                local_work_size: 32,
+                global_work_size: works * n,
             },
             GpuFunction {
                 source_code: source_code_2,
                 kernel_name: format!("grad_{}_1", out_id),
-                local_work_size: local_work_size_2,
-                global_work_size: global_work_size_2,
+                local_work_size: 32,
+                global_work_size: n,
             },
         ],
         shared_buffers: vec![n * works],

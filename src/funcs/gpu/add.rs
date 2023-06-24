@@ -22,7 +22,7 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
     }}"
     );
 
-    let source_code = format!(
+    let backward_source_code_part_1 = format!(
         "__kernel void grad_{out_id}_1(
                         __global float* out,
                         __global float* out_grad,
@@ -38,7 +38,7 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
     }}"
     );
 
-    let source_code_2 = format!(
+    let backward_source_code_part_2 = format!(
         "__kernel void grad_{out_id}_2(
                         __global float* out,
                         __global float* out_grad,
@@ -66,13 +66,13 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
         }],
         backward_funcs: vec![
             KernelCall {
-                source_code,
+                source_code: backward_source_code_part_1,
                 kernel_name: format!("grad_{}_1", out_id),
                 local_work_size: 32,
                 global_work_size: works,
             },
             KernelCall {
-                source_code: source_code_2,
+                source_code: backward_source_code_part_2,
                 kernel_name: format!("grad_{}_2", out_id),
                 local_work_size: 32,
                 global_work_size: inp1_size,

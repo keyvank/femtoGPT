@@ -394,9 +394,12 @@ impl Graph for GpuGraph {
             let buffs = program.comp_buffers.get(id).ok_or(GraphError::NotReady)?;
 
             for k in c.gpu_function.backward_funcs.iter() {
+                let mut global_work_size = k.global_work_size;
+                global_work_size +=
+                    (k.local_work_size - (global_work_size % k.local_work_size)) % k.local_work_size;
                 let mut kern = program.program.create_kernel(
                     &k.kernel_name,
-                    k.global_work_size,
+                    global_work_size,
                     k.local_work_size,
                 );
                 kern = kern.arg(out);

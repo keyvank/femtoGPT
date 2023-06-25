@@ -45,6 +45,6 @@ impl Function for Dropout {
 
     #[cfg(feature = "gpu")]
     fn gpu_impl(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
-        gpu::dropout::gpu_impl(out_id, inps)
+        gpu::dropout::gpu_impl(out_id, inps, self.rate)
     }
 }

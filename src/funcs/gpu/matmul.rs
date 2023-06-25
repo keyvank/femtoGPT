@@ -33,7 +33,7 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
             b += {n} * {p} * id_b;
             out[ij] = 0.0;
             for(uint k = 0; k < {n}; k++) {{
-                out[i * {p} + j] += a[i * {n} + k] * b[{p} * k + j];
+                out[ij] += a[i * {n} + k] * b[{p} * k + j];
             }}
         }}
     }}"
@@ -61,7 +61,7 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
             a_grad += {mn} * id_a;
             b += {np} * id_b;
             for(uint j = 0; j < {p}; j++) {{
-                a_grad[i * {n} + k] += out_grad[i * {p} + j] * b[k * {p} + j];
+                a_grad[ik] += out_grad[i * {p} + j] * b[k * {p} + j];
             }}
         }}
     }}"
@@ -80,7 +80,6 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
         uint wid = get_global_id(0);
         uint id = wid / {np};
         uint id_a = id % {inp0_size};
-        uint id_b = id % {inp1_size};
         uint kj = wid % {np};
         uint k = kj / {p};
         uint j = kj % {p};
@@ -88,9 +87,9 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
             out_grad += {mp} * id;
             a += {mn} * id_a;
             float *gb = grad_buff + {np} * id;
-            gb[k * {p} + j] = 0.0;
+            gb[kj] = 0.0;
             for(uint i = 0; i < {m}; i++) {{
-                gb[k * {p} + j] += a[i * {n} + k] * out_grad[i * {p} + j];
+                gb[kj] += a[i * {n} + k] * out_grad[i * {p} + j];
             }}
         }}
     }}"

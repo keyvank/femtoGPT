@@ -17,7 +17,7 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>], rate: f32) -> GpuFunction
 
         if(id < {works}) {{
             if(seeds[id] == 0) {{
-                seeds[id] = 1;
+                seeds[id] = id;
             }}
             seeds[id] = (seeds[id] * A) % M;
 

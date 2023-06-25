@@ -8,6 +8,8 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
         "__kernel void calc_{out_id}(
                         __global float* out,
                         __global float* coeff_grad_temp,
+                        __global float* avg_buff,
+                        __global float* sigma2_buff,
                         __global float* a,
                         __global float* coeff,
                         __global float* bias) {{
@@ -21,11 +23,14 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
                 avg += a[i];
             }}
             avg *= size_inv;
+            avg_buff[id] = avg;
             float var = 0.;
             for(uint i = 0; i < {n}; i++) {{
                 var += (a[i] - avg) * (a[i] - avg);
             }}
-            float var_inv = 1. / sqrt(var * size_inv + 1e-5);
+            var *= size_inv;
+            sigma2_buff[id] = var;
+            float var_inv = 1. / sqrt(var + 1e-5);
             for(uint i = 0; i < {n}; i++) {{
                 out[i] = (a[i] - avg) * var_inv * coeff[i] + bias[i];
             }}
@@ -38,6 +43,8 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
                         __global float* out,
                         __global float* out_grad,
                         __global float* coeff_grad_temp,
+                        __global float* avg_buff,
+                        __global float* sigma2_buff,
                         __global float* inp,
                         __global float* inp_grad,
                         __global float* coeff,
@@ -60,19 +67,9 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
             }}
 
             float n_inv = 1.0 / {n};
-            float avg = 0.0;
-            for(uint ii = 0; ii < {n}; ii++) {{
-                avg += inp[ii];
-            }}
-            avg *= n_inv;
-
-            float sigma2 = 0.0;
-            for(uint ii = 0; ii < {n}; ii++) {{
-                sigma2 += (inp[ii] - avg) * (inp[ii] - avg);
-            }}
-            sigma2 *= n_inv;
+            float avg = avg_buff[id];
+            float sigma2 = sigma2_buff[id];
             sigma2 += 0.00001;
-
             float sigma2_inv = 1.0 / sigma2;
             float sigma = sqrt(sigma2);
             float sigma_inv = 1. / sigma;
@@ -95,6 +92,8 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
                         __global float* out,
                         __global float* out_grad,
                         __global float* coeff_grad_temp,
+                        __global float* avg_buff,
+                        __global float* sigma2_buff,
                         __global float* inp,
                         __global float* inp_grad,
                         __global float* coeff,
@@ -132,6 +131,6 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
                 global_work_size: n,
             },
         ],
-        shared_buffers: vec![n * works],
+        shared_buffers: vec![n * works, works, works],
     }
 }

@@ -1,6 +1,6 @@
 pub mod program;
 use super::*;
-use crate::funcs::GpuFunction;
+use crate::funcs::{GpuFunction, SharedBuffer};
 use program::{Brand, Buffer, Device, Program, ProgramError};
 use std::collections::HashMap;
 
@@ -175,9 +175,13 @@ impl GpuGraph {
                 comp.gpu_function
                     .shared_buffers
                     .iter()
-                    .map(|sz| {
-                        prog.create_buffer::<f32>(*sz)
-                            .map(|b| GeneralBuffer::Float(b))
+                    .map(|sb| match sb {
+                        SharedBuffer::Float(sz) => prog
+                            .create_buffer::<f32>(*sz)
+                            .map(|b| GeneralBuffer::Float(b)),
+                        SharedBuffer::Usize(sz) => prog
+                            .create_buffer::<usize>(*sz)
+                            .map(|b| GeneralBuffer::Usize(b)),
                     })
                     .collect::<Result<Vec<_>, ProgramError>>()
                     .unwrap()

@@ -131,6 +131,10 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
                 global_work_size: n,
             },
         ],
-        shared_buffers: vec![n * works, works, works],
+        shared_buffers: vec![
+            SharedBuffer::Float(n * works),
+            SharedBuffer::Float(works),
+            SharedBuffer::Float(works),
+        ],
     }
 }

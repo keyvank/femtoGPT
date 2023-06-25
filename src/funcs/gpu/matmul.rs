@@ -116,7 +116,7 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
     );
 
     GpuFunction {
-        shared_buffers: vec![np * mats],
+        shared_buffers: vec![SharedBuffer::Float(np * mats)],
         forward_funcs: vec![KernelCall {
             source_code: forward_source_code,
             kernel_name: format!("calc_{}", out_id),

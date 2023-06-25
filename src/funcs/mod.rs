@@ -5,7 +5,7 @@ use crate::graph::TensorId;
 mod gpu;
 
 #[cfg(feature = "gpu")]
-pub use gpu::{GpuFunction, KernelCall};
+pub use gpu::{GpuFunction, KernelCall, SharedBuffer};
 
 mod add;
 mod cat;

@@ -83,13 +83,14 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
         uint kj = wid % {np};
         uint k = kj / {p};
         uint j = kj % {p};
+
         if(id < {works_2}) {{
             out_grad += {mp} * id;
             a += {mn} * id_a;
-            float *gb = grad_buff + {np} * id;
-            gb[kj] = 0.0;
+            grad_buff += {np} * id;
+            grad_buff[kj] = 0.0;
             for(uint i = 0; i < {m}; i++) {{
-                gb[kj] += a[i * {n} + k] * out_grad[i * {p} + j];
+                grad_buff[kj] += a[i * {n} + k] * out_grad[i * {p} + j];
             }}
         }}
     }}"

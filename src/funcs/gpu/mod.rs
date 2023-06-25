@@ -3,6 +3,7 @@ pub mod cat;
 pub mod coeff;
 pub mod dropout;
 pub mod embedding;
+pub mod gelu;
 pub mod layer_norm;
 pub mod matmul;
 pub mod relu;

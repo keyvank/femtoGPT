@@ -395,8 +395,8 @@ impl Graph for GpuGraph {
 
             for k in c.gpu_function.backward_funcs.iter() {
                 let mut global_work_size = k.global_work_size;
-                global_work_size +=
-                    (k.local_work_size - (global_work_size % k.local_work_size)) % k.local_work_size;
+                global_work_size += (k.local_work_size - (global_work_size % k.local_work_size))
+                    % k.local_work_size;
                 let mut kern = program.program.create_kernel(
                     &k.kernel_name,
                     global_work_size,

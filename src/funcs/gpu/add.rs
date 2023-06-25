@@ -1,11 +1,11 @@
 use super::*;
 
 pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
-    let inp0_size = inps[0].iter().fold(1, |a, b| a * b);
-    let inp1_size = inps[1].iter().fold(1, |a, b| a * b);
-    assert!(inp1_size <= inp0_size);
-    let repeats = inp0_size / inp1_size;
-    let works = std::cmp::max(inp0_size, inp1_size);
+    let a_size = inps[0].iter().fold(1, |a, b| a * b);
+    let b_size = inps[1].iter().fold(1, |a, b| a * b);
+    assert!(b_size <= a_size);
+    let repeats = a_size / b_size;
+    let works = std::cmp::max(a_size, b_size);
 
     let forward_source_code = format!(
         "__kernel void calc_{out_id}(
@@ -13,8 +13,8 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
                         __global float* a,
                         __global float* b) {{
         uint id = get_global_id(0);
-        uint id_a = id % {inp0_size};
-        uint id_b = id % {inp1_size};
+        uint id_a = id % {a_size};
+        uint id_b = id % {b_size};
         if(id < {works}) {{
             out[id] = a[id_a] + b[id_b];
         }}
@@ -45,9 +45,9 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
                         __global float* b,
                         __global float* b_grad) {{
         uint id = get_global_id(0);
-        if(id < {inp1_size}) {{
+        if(id < {b_size}) {{
             for(uint i = 0; i < {repeats}; i++) {{
-                b_grad[id] += out_grad[i * {inp1_size} + id];
+                b_grad[id] += out_grad[i * {b_size} + id];
             }}
         }}
     }}"
@@ -72,7 +72,7 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
                 source_code: backward_source_code_part_2,
                 kernel_name: format!("grad_{}_2", out_id),
                 local_work_size: 32,
-                global_work_size: inp1_size,
+                global_work_size: b_size,
             },
         ],
     }

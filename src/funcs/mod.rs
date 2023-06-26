@@ -10,7 +10,6 @@ pub use gpu::{GpuFunction, KernelCall, SharedBuffer};
 mod add;
 mod cat;
 mod coeff;
-mod crossentropy;
 mod crossentropyfunc;
 mod dropout;
 mod embedding;
@@ -25,7 +24,6 @@ mod trilmask;
 pub use add::*;
 pub use cat::*;
 pub use coeff::*;
-pub use crossentropy::*;
 pub use crossentropyfunc::*;
 pub use dropout::*;
 pub use embedding::*;
@@ -50,8 +48,4 @@ pub trait Function: std::fmt::Debug {
 
     #[cfg(feature = "gpu")]
     fn gpu_impl(&self, _out_id: TensorId, _inp_shapes: &[Vec<usize>]) -> GpuFunction;
-}
-
-pub trait Loss: std::fmt::Debug {
-    fn run(&self, inp: &GeneralTensor) -> Result<(Tensor<f32>, Tensor<f32>), TensorError>;
 }

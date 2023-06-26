@@ -2,7 +2,7 @@ use super::Function;
 use crate::tensor::*;
 
 #[cfg(feature = "gpu")]
-use super::{GpuFunction, TensorId};
+use super::{gpu, GpuFunction, TensorId};
 
 #[derive(Debug, Clone)]
 pub struct CrossEntropyFunc;
@@ -38,7 +38,7 @@ impl Function for CrossEntropyFunc {
     fn grad(
         &self,
         inps: &[&GeneralTensor],
-        _out_grad: &Tensor<f32>,
+        out_grad: &Tensor<f32>,
     ) -> Result<Vec<Tensor<f32>>, TensorError> {
         let inp = inps[0].as_float()?;
         let target = inps[1].as_usize()?;
@@ -51,7 +51,8 @@ impl Function for CrossEntropyFunc {
                 .inners()
                 .iter()
                 .zip(target.blob().iter())
-                .map(|(o, t)| {
+                .zip(out_grad.blob().iter())
+                .map(|((o, t), g)| {
                     let o_exps = o.blob().iter().map(|f| f.exp()).collect::<Vec<_>>();
                     let sum = o_exps.iter().sum::<f32>();
                     let sum_inv = 1. / sum;
@@ -59,11 +60,11 @@ impl Function for CrossEntropyFunc {
                     let grad = (0..classes)
                         .map(|c| {
                             let val = o_exps[c];
-                            if *t == c {
+                            (if *t == c {
                                 val * sum_inv - 1.0
                             } else {
                                 val * sum_inv
-                            }
+                            }) * g
                         })
                         .collect::<Vec<_>>();
 
@@ -78,7 +79,7 @@ impl Function for CrossEntropyFunc {
     }
 
     #[cfg(feature = "gpu")]
-    fn gpu_impl(&self, _out_id: TensorId, _inps: &[Vec<usize>]) -> GpuFunction {
-        unimplemented!()
+    fn gpu_impl(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
+        gpu::crossentropy::gpu_impl(out_id, inps)
     }
 }

@@ -347,20 +347,13 @@ impl Graph for GpuGraph {
         }
         Ok(gt.mirror.as_float()?)
     }
-    fn backward_all(
-        &mut self,
-        id: TensorId,
-        loss_fn: Box<dyn Loss>,
-        _limit: Option<usize>,
-    ) -> Result<f32, GraphError> {
+    fn backward_all(&mut self, id: TensorId, _limit: Option<usize>) -> Result<f32, GraphError> {
         self.compile()?;
 
         self.fetch(id, false)?;
-        let output = Graph::get(self, id)?;
-        let (loss, grad) = loss_fn.run(output)?;
-        let mean_coeff = 1. / loss.size() as f32;
-
-        self.load_grad(id, &(&grad * &Tensor::scalar(mean_coeff))?)?;
+        let output = self.get(id)?.mirror.as_float()?.clone();
+        let mean_coeff = 1. / output.size() as f32;
+        self.load_grad(id, &Tensor::constant(output.shape(), mean_coeff))?;
 
         let program = self.program.as_mut().ok_or(GraphError::NotReady)?;
 
@@ -419,7 +412,7 @@ impl Graph for GpuGraph {
             }
         }
 
-        Ok(loss.mean())
+        Ok(output.mean())
     }
     fn forward(&mut self, training: bool) -> Result<(), GraphError> {
         self.compile()?;

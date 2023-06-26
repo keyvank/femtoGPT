@@ -16,11 +16,12 @@ pub struct TrainingState {
 
 pub struct GPT<G: Graph> {
     graph: G,
-    vocab_size: usize,
     num_tokens: usize,
     token_input: TensorId,
     pos_input: TensorId,
     output: TensorId,
+    expected_output: TensorId,
+    loss: TensorId,
     pos_input_fixed: Tensor<f32>,
 }
 
@@ -133,6 +134,15 @@ impl<G: Graph> GPT<G> {
                 vec![num_tokens]
             }),
             "token_input".into(),
+        )?;
+
+        let expected_output = g.alloc_usize(
+            Tensor::<usize>::zeros(&if let Some(batch_size) = batch_size {
+                vec![batch_size, num_tokens]
+            } else {
+                vec![num_tokens]
+            }),
+            "expected_output".into(),
         )?;
 
         // Map the token index into a `embedding_degree` dimension vector through the `token_embedding`
@@ -299,13 +309,16 @@ impl<G: Graph> GPT<G> {
         let result_lin = g.call(MatMul::new(), &[norm_out, to_vocab])?;
         let output = g.call(Add::new(), &[result_lin, to_vocab_bias])?;
 
+        let loss = g.call(CrossEntropyFunc::new(), &[output, expected_output])?;
+
         Ok(Self {
             graph: g,
-            vocab_size,
             num_tokens,
             token_input,
             pos_input,
             output,
+            expected_output,
+            loss,
             pos_input_fixed: pos_encode_inter(num_tokens, embedding_degree),
         })
     }
@@ -388,13 +401,10 @@ impl<G: Graph> GPT<G> {
                     let (xs, ys) = sample_dataset(dataset, 1, self.num_tokens, &mut rng);
 
                     graph.load_usize(self.token_input, &xs)?;
+                    graph.load_usize(self.expected_output, &ys)?;
                     graph.forward(true)?;
                     graph.zero_grad()?;
-                    let err = graph.backward_all(
-                        self.output,
-                        CrossEntropy::new(self.vocab_size, ys.clone()),
-                        limit,
-                    )?;
+                    let err = graph.backward_all(self.loss, limit)?;
                     Ok((graph, err))
                 })
                 .collect::<Result<Vec<(G, f32)>, GraphError>>()?
@@ -452,14 +462,11 @@ impl<G: Graph> GPT<G> {
             let (xs, ys) = sample_dataset(dataset, batch_size, self.num_tokens, &mut rng);
 
             self.graph.load_usize(self.token_input, &xs)?;
+            self.graph.load_usize(self.expected_output, &ys)?;
 
             self.graph.forward(true)?;
             self.graph.zero_grad()?;
-            let err = self.graph.backward_all(
-                self.output,
-                CrossEntropy::new(self.vocab_size, ys.clone()),
-                limit,
-            )?;
+            let err = self.graph.backward_all(self.loss, limit)?;
             let lr = learning_rate(self.graph.optimizer_step());
             self.graph.optimize(optimizer, lr)?;
             if i % 50 == 0 {

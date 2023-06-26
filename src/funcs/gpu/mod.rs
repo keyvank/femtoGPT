@@ -1,6 +1,7 @@
 pub mod add;
 pub mod cat;
 pub mod coeff;
+pub mod crossentropy;
 pub mod dropout;
 pub mod embedding;
 pub mod gelu;
@@ -10,7 +11,6 @@ pub mod relu;
 pub mod softmax;
 pub mod transpose;
 pub mod trilmask;
-
 use crate::graph::TensorId;
 
 #[derive(Clone, Debug)]

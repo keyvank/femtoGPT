@@ -1,7 +1,7 @@
 #[cfg(feature = "gpu")]
 pub mod gpu;
 
-use crate::funcs::{Function, Loss};
+use crate::funcs::Function;
 use crate::optimizer::{Optimizer, OptimizerState};
 use crate::tensor::*;
 use std::collections::{BTreeMap, HashMap};
@@ -38,12 +38,7 @@ pub trait Graph {
     fn fetch(&mut self, id: TensorId, grad: bool) -> Result<(), GraphError>;
     fn get(&self, id: TensorId) -> Result<&GeneralTensor, GraphError>;
     fn get_grad(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError>;
-    fn backward_all(
-        &mut self,
-        id: TensorId,
-        loss_fn: Box<dyn Loss>,
-        limit: Option<usize>,
-    ) -> Result<f32, GraphError>;
+    fn backward_all(&mut self, id: TensorId, limit: Option<usize>) -> Result<f32, GraphError>;
     fn forward(&mut self, training: bool) -> Result<(), GraphError>;
     fn call(
         &mut self,
@@ -198,16 +193,10 @@ impl Graph for CpuGraph {
     fn get_grad(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError> {
         self.grads.get(id).ok_or(GraphError::TensorNotFound(id))
     }
-    fn backward_all(
-        &mut self,
-        id: TensorId,
-        loss_fn: Box<dyn Loss>,
-        limit: Option<usize>,
-    ) -> Result<f32, GraphError> {
-        let output = self.get(id)?;
-        let (loss, grad) = loss_fn.run(output)?;
-        let mean_coeff = 1. / loss.size() as f32;
-        self.add_grad(id, (&grad * &Tensor::scalar(mean_coeff))?)?;
+    fn backward_all(&mut self, id: TensorId, limit: Option<usize>) -> Result<f32, GraphError> {
+        let output = self.get(id)?.as_float()?.clone();
+        let mean_coeff = 1. / output.size() as f32;
+        self.add_grad(id, Tensor::constant(output.shape(), mean_coeff))?;
 
         for (i, (id, comp)) in self.computations.clone().iter().rev().enumerate() {
             if let Some(limit) = limit {
@@ -227,7 +216,7 @@ impl Graph for CpuGraph {
             }
         }
 
-        Ok(loss.mean())
+        Ok(output.mean())
     }
     fn forward(&mut self, training: bool) -> Result<(), GraphError> {
         for (out, c) in self.computations.iter_mut() {

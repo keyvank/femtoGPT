@@ -137,6 +137,14 @@ impl GpuGraph {
             return Ok(());
         }
         let mut src = String::new();
+        src += "
+        __kernel void zeroize(__global float *buff, uint n) {
+            uint id = get_global_id(0);
+            if(id < n) {{
+                buff[id] = 0;
+            }}
+        }
+        ";
         for comp in self.computations.values() {
             for func in comp.gpu_function.forward_funcs.iter() {
                 src = src + &func.source_code;
@@ -320,13 +328,22 @@ impl Graph for GpuGraph {
         Ok(())
     }
     fn zero_grad(&mut self) -> Result<(), GraphError> {
+        self.compile()?;
+        let program = self.program.as_mut().ok_or(GraphError::NotReady)?;
         for gt in self.grads.iter_mut() {
-            gt.mirror = GeneralTensor::Float(Tensor::zeros(gt.mirror.shape()));
-            gt.buffer
-                .as_mut()
-                .ok_or(GraphError::NotReady)?
-                .write_from(&gt.mirror)?;
-            gt.is_sync = true;
+            let buffer = gt.buffer.as_ref().ok_or(GraphError::NotReady)?;
+            gt.is_sync = false;
+            let local_work_size = 32;
+            let mut global_work_size = gt.mirror.size();
+            global_work_size +=
+                (local_work_size - (global_work_size % local_work_size)) % local_work_size;
+            let mut kern =
+                program
+                    .program
+                    .create_kernel("zeroize", global_work_size, local_work_size);
+            kern = kern.arg(buffer);
+            kern = kern.arg(gt.mirror.size() as u32);
+            kern.run()?;
         }
         Ok(())
     }

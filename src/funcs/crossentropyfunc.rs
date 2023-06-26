@@ -2,7 +2,7 @@ use super::Function;
 use crate::tensor::*;
 
 #[cfg(feature = "gpu")]
-use super::{gpu, GpuFunction, GpuFunctionGroup, TensorId};
+use super::{GpuFunction, TensorId};
 
 #[derive(Debug, Clone)]
 pub struct CrossEntropyFunc;
@@ -78,12 +78,7 @@ impl Function for CrossEntropyFunc {
     }
 
     #[cfg(feature = "gpu")]
-    fn gpu_run(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
-        unimplemented!()
-    }
-
-    #[cfg(feature = "gpu")]
-    fn gpu_grad(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
+    fn gpu_impl(&self, _out_id: TensorId, _inps: &[Vec<usize>]) -> GpuFunction {
         unimplemented!()
     }
 }

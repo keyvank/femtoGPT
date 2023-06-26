@@ -104,10 +104,14 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
                         __global float* bias_grad) {{
         uint id = get_global_id(0);
         if(id < {n}) {{
+            float coeff_sum = 0.0;
+            float bias_sum = 0.0;
             for(uint i = 0; i < {works}; i++) {{
-                coeff_grad[id] += coeff_grad_temp[i * {n} + id];
-                bias_grad[id] += out_grad[i * {n} + id];
+                coeff_sum += coeff_grad_temp[i * {n} + id];
+                bias_sum += out_grad[i * {n} + id];
             }}
+            coeff_grad[id] += coeff_sum;
+            bias_grad[id] += bias_sum;
         }}
     }}"
     );

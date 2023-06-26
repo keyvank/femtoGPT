@@ -46,9 +46,11 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
                         __global float* b_grad) {{
         uint id = get_global_id(0);
         if(id < {b_size}) {{
+            float sum = 0.0;
             for(uint i = 0; i < {repeats}; i++) {{
-                b_grad[id] += out_grad[i * {b_size} + id];
+                sum += out_grad[i * {b_size} + id];
             }}
+            b_grad[id] += sum;
         }}
     }}"
     );

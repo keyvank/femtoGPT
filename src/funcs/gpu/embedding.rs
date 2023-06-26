@@ -42,7 +42,7 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
             source_code: forward_source_code,
             kernel_name: format!("calc_{}", out_id),
             local_work_size: 32,
-            global_work_size: degree,
+            global_work_size: works,
         }],
         backward_funcs: vec![KernelCall {
             source_code: backward_source_code,

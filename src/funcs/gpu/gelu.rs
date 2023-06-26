@@ -8,9 +8,12 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
                         __global float* out,
                         __global float* a) {{
         uint id = get_global_id(0);
+        float SQRT_2_OVER_PI = 0.7978845608;
+        float GELU_CONST = 0.044715;
         if(id < {works}) {{
-            float val = a[id];
-            out[id] = val > 0. ? val : val * 0.01;
+            float x = a[id];
+            float x3 = x * x * x;
+            out[id] = 0.5 * x * (tanh(SQRT_2_OVER_PI * (x + GELU_CONST * x3)) + 1.);
         }}
     }}"
     );
@@ -22,9 +25,17 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
                         __global float* a,
                         __global float* a_grad) {{
         uint id = get_global_id(0);
+        float SQRT_2_OVER_PI = 0.7978845608;
+        float GELU_CONST = 0.044715;
         if(id < {works}) {{
-            float val = a[id];
-            a_grad[id] += val > 0. ? out_grad[id] : out_grad[id] * 0.01;
+            float x = a[id];
+            float x2 = x * x;
+            float x3 = x2 * x;
+            float v = SQRT_2_OVER_PI * x + SQRT_2_OVER_PI * GELU_CONST * x3;
+            float v_prime = SQRT_2_OVER_PI + 3. * SQRT_2_OVER_PI * GELU_CONST * x2;
+            float cosh = cosh(v);
+            float sech_2 = 1. / (cosh * cosh);
+            a_grad[id] += 0.5 * (1. + tanh(v) + x * sech_2 * v_prime);
         }}
     }}"
     );

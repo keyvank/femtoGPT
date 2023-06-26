@@ -1,10 +1,10 @@
 use super::*;
 
-pub fn gpu_run(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
+pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
     let n = inps[0][inps[0].len() - 1];
     let works = inps[0][..inps[0].len() - 1].iter().fold(1, |a, b| a * b);
 
-    let source_code = format!(
+    let forward_source_code = format!(
         "__kernel void calc_{out_id}(
                         __global float* out,
                         __global float* a) {{
@@ -29,23 +29,7 @@ pub fn gpu_run(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
     }}"
     );
 
-    let local_work_size = 32;
-    let global_work_size =
-        works + ((local_work_size - (works % local_work_size)) % local_work_size);
-
-    GpuFunction {
-        source_code,
-        kernel_name: format!("calc_{}", out_id),
-        local_work_size,
-        global_work_size,
-    }
-}
-
-pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
-    let n = inps[0][inps[0].len() - 1];
-    let works = inps[0][..inps[0].len() - 1].iter().fold(1, |a, b| a * b);
-
-    let source_code = format!(
+    let backward_source_code = format!(
         "__kernel void grad_{out_id}(
                         __global float* out,
                         __global float* out_grad,
@@ -71,16 +55,18 @@ pub fn gpu_grad(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunctionGroup {
     }}"
     );
 
-    let local_work_size = 32;
-    let global_work_size =
-        works * n + ((local_work_size - (works * n % local_work_size)) % local_work_size);
-
-    GpuFunctionGroup {
-        funcs: vec![GpuFunction {
-            source_code,
+    GpuFunction {
+        forward_funcs: vec![KernelCall {
+            source_code: forward_source_code,
+            kernel_name: format!("calc_{}", out_id),
+            local_work_size: 32,
+            global_work_size: works,
+        }],
+        backward_funcs: vec![KernelCall {
+            source_code: backward_source_code,
             kernel_name: format!("grad_{}", out_id),
-            local_work_size,
-            global_work_size,
+            local_work_size: 32,
+            global_work_size: works * n,
         }],
         shared_buffers: vec![],
     }

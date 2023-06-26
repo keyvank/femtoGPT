@@ -1,6 +1,9 @@
 use super::Function;
 use crate::tensor::*;
 
+#[cfg(feature = "gpu")]
+use super::{gpu, GpuFunction, TensorId};
+
 const SQRT_2_OVER_PI: f32 = 0.7978845608;
 const GELU_CONST: f32 = 0.044715;
 
@@ -42,6 +45,11 @@ impl Function for Gelu {
     }
     fn clone_box(&self) -> Box<dyn Function> {
         Box::new(self.clone())
+    }
+
+    #[cfg(feature = "gpu")]
+    fn gpu_impl(&self, out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
+        gpu::gelu::gpu_impl(out_id, inps)
     }
 }
 

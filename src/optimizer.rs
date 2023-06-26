@@ -10,6 +10,14 @@ pub struct OptimizerState {
     pub state: HashMap<String, Tensor<f32>>,
 }
 
+#[cfg(feature = "gpu")]
+#[derive(Clone, Debug)]
+pub struct GpuOptimizer {
+    pub extra_buffers: HashMap<String, usize>,
+    pub source_code: String,
+    pub kernel_name: String,
+}
+
 pub trait Optimizer: Clone + Serialize + serde::de::DeserializeOwned {
     fn step(
         &self,
@@ -17,6 +25,9 @@ pub trait Optimizer: Clone + Serialize + serde::de::DeserializeOwned {
         optimizer_state: &mut OptimizerState,
         learning_rate: f32,
     ) -> Result<(), TensorError>;
+
+    #[cfg(feature = "gpu")]
+    fn gpu_impl(&self, params: &HashMap<String, Vec<usize>>) -> GpuOptimizer;
 }
 
 const EPSILON: f32 = 1e-8;
@@ -95,5 +106,48 @@ impl Optimizer for AdamW {
         }
         optimizer_state.step += 1;
         Ok(())
+    }
+
+    #[cfg(feature = "gpu")]
+    fn gpu_impl(&self, params: &HashMap<String, Vec<usize>>) -> GpuOptimizer {
+        let source_code = "
+        __kernel void optimizer(__global float *param,
+                                __global float *grad,
+                                __global float *m,
+                                __global float *v,
+                                float learning_rate,
+                                ulong step,
+                                ulong n) {
+            uint id = get_global_id(0);
+            param += id;
+            grad += id;
+            m += id;
+            v += id;
+            float beta1 = 0.9;
+            float beta2 = 0.999;
+            float weight_decay = 0.01;
+            if(id < n) {
+                *param = *param - *param * learning_rate * weight_decay;
+                *m = beta1 * (*m) + (1 - beta1) * (*grad);
+                *v = beta2 * (*v) + (1 - beta2) * (*grad) * (*grad);
+                float m_hat = *m / (1.0 - pow(beta1, step + 1));
+                float v_hat = *v / (1.0 - pow(beta2, step + 1));
+                float v_hat_sqrt_inv = learning_rate / (sqrt(v_hat) + 1e-8);
+                *param = *param - m_hat * v_hat_sqrt_inv;
+            }
+        }"
+        .into();
+        GpuOptimizer {
+            source_code,
+            extra_buffers: params
+                .iter()
+                .map(|(k, v)| {
+                    let sz = v.iter().fold(1, |a, b| a * b);
+                    vec![(k.clone() + "_m", sz), (k.clone() + "_v", sz)]
+                })
+                .flatten()
+                .collect(),
+            kernel_name: "optimizer".into(),
+        }
     }
 }

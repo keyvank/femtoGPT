@@ -76,12 +76,14 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
 
             float a = inp[i];
             float sum = 0.0;
+            float n_inv_sigma = n_inv * sigma;
+            float n_inv_sigma_inv = n_inv * sigma_inv;
             for(uint j = 0; j < {n}; j++) {{
                 if(i == j) {{
-                    sum += ((1. - n_inv) * sigma - (a - avg) * (a - avg) * sigma_inv * n_inv) * sigma2_inv * out_grad[j] * coeff[j];
+                    sum += (sigma - n_inv_sigma - (a - avg) * (a - avg) * n_inv_sigma_inv) * sigma2_inv * out_grad[j] * coeff[j];
                 }} else {{
                     float b = inp[j];
-                    sum += (-n_inv * sigma - (b - avg) * (a - avg) * sigma_inv * n_inv) * sigma2_inv * out_grad[j] * coeff[j];
+                    sum += (-n_inv_sigma - (b - avg) * (a - avg) * n_inv_sigma_inv) * sigma2_inv * out_grad[j] * coeff[j];
                 }}
             }}
             inp_grad[i] += sum;

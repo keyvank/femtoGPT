@@ -177,7 +177,8 @@ impl Tokenizer for SentencePieceTokenizer {
         self.vocab.len()
     }
     fn tokenize(&self, text: &str) -> Vec<usize> {
-        let text = text.replace(' ', &PREFIXED_UNDERSCORE.to_string());
+        let text = (String::from(" ") + &text.replace('\n', " "))
+            .replace(' ', &PREFIXED_UNDERSCORE.to_string());
         let text = text.as_str();
         let output = self.decode_forward_dag(text);
         let decoded = self.decode_backward(&output);

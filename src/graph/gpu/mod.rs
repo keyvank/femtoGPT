@@ -638,26 +638,30 @@ impl Graph for GpuGraph {
             let key_m = format!("{}_m", name);
             let key_v = format!("{}_v", name);
 
-            let m = self
-                .optimizer_state
-                .get_mut(&key_m)
-                .unwrap()
-                .buffer
-                .as_mut()
-                .unwrap();
-            let m_val = GeneralTensor::Float(state.state.get(&key_m).unwrap().clone());
-            m.write_from(&m_val)?;
-            drop(m);
+            if let Some(m_content) = state.state.get(&key_m).cloned() {
+                let m = self
+                    .optimizer_state
+                    .get_mut(&key_m)
+                    .unwrap()
+                    .buffer
+                    .as_mut()
+                    .unwrap();
+                let m_val = GeneralTensor::Float(m_content);
+                m.write_from(&m_val)?;
+                drop(m);
+            }
 
-            let v = self
-                .optimizer_state
-                .get_mut(&key_v)
-                .unwrap()
-                .buffer
-                .as_mut()
-                .unwrap();
-            let v_val = GeneralTensor::Float(state.state.get(&key_v).unwrap().clone());
-            v.write_from(&v_val)?;
+            if let Some(v_content) = state.state.get(&key_v).cloned() {
+                let v = self
+                    .optimizer_state
+                    .get_mut(&key_v)
+                    .unwrap()
+                    .buffer
+                    .as_mut()
+                    .unwrap();
+                let v_val = GeneralTensor::Float(v_content);
+                v.write_from(&v_val)?;
+            }
         }
         Ok(())
     }

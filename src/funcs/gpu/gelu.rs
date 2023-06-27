@@ -35,7 +35,7 @@ pub fn gpu_impl(out_id: TensorId, inps: &[Vec<usize>]) -> GpuFunction {
             float v_prime = SQRT_2_OVER_PI + 3. * SQRT_2_OVER_PI * GELU_CONST * x2;
             float cosh_v = cosh(v);
             float sech_2_v = 1. / (cosh_v * cosh_v);
-            a_grad[id] += 0.5 * (1. + tanh(v) + x * sech_2_v * v_prime) * out_grad[i];
+            a_grad[id] += 0.5 * (1. + tanh(v) + x * sech_2_v * v_prime) * out_grad[id];
         }}
     }}"
     );

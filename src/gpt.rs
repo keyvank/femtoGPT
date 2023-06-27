@@ -265,7 +265,7 @@ impl<G: Graph> GPT<G> {
             )?;
             let lin1_result = g.call(MatMul::new(), &[add_atten_norm, lin1_params])?;
             let lin1_bias_result = g.call(Add::new(), &[lin1_result, bias1_params])?;
-            let lin1_act = g.call(Relu::new(), &[lin1_bias_result])?;
+            let lin1_act = g.call(Gelu::new(), &[lin1_bias_result])?;
             let lin2_params = g.alloc(
                 Tensor::<f32>::rand(rng, &[4 * embedding_degree, embedding_degree]),
                 true,

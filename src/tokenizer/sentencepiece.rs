@@ -13,6 +13,7 @@
 
 use super::Tokenizer;
 
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io;
@@ -102,20 +103,20 @@ impl SentencePieceTokenizer {
         }
     }
 
-    fn decode_backward<'a>(&'a self, nodes: &'a Vec<Option<Node>>) -> Vec<&'a Node> {
+    fn decode_backward(&self, nodes: Vec<Option<Node>>) -> Vec<usize> {
         let mut next_node = nodes.last().unwrap();
         let mut best_sequence = vec![];
 
         while next_node.is_some() {
-            let node_value = next_node.as_ref().unwrap();
-            best_sequence.push(node_value);
+            let node_value = next_node.clone().unwrap();
+            best_sequence.push(node_value.index);
             next_node = &nodes[node_value.start];
         }
         best_sequence.reverse();
         best_sequence
     }
 
-    fn common_prefix_search<'a>(&'a self, text: &'a str) -> Vec<&DagNode> {
+    fn common_prefix_search(&self, text: &str) -> Vec<&DagNode> {
         let mut results = vec![];
         let mut characters = text.chars();
 
@@ -140,7 +141,7 @@ impl SentencePieceTokenizer {
         results
     }
 
-    fn decode_forward_dag<'a>(&'a self, text: &'a str) -> Vec<Option<Node>> {
+    fn decode_forward_dag(&self, text: &str) -> Vec<Option<Node>> {
         let mut char_positions = text.char_indices().map(|(pos, _)| pos).collect::<Vec<_>>();
         char_positions.push(text.len());
         let mut results = vec![None; char_positions.len()];
@@ -177,12 +178,24 @@ impl Tokenizer for SentencePieceTokenizer {
         self.vocab.len()
     }
     fn tokenize(&self, text: &str) -> Vec<usize> {
-        let text = (String::from(" ") + &text.replace('\n', " "))
-            .replace(' ', &PREFIXED_UNDERSCORE.to_string());
-        let text = text.as_str();
-        let output = self.decode_forward_dag(text);
-        let decoded = self.decode_backward(&output);
-        decoded.into_iter().map(|node| node.index).collect()
+        let lines = text.split("\n").collect::<Vec<_>>();
+        let chunk_size = std::cmp::max(1, lines.len() / rayon::current_num_threads());
+
+        lines
+            .par_chunks(chunk_size)
+            .map(|lines| {
+                let mut tokens = Vec::new();
+                for line in lines.iter() {
+                    let text =
+                        (String::from(" ") + line).replace(' ', &PREFIXED_UNDERSCORE.to_string());
+                    let text = text.as_str();
+                    let output = self.decode_forward_dag(text);
+                    tokens.extend(self.decode_backward(output));
+                }
+                tokens
+            })
+            .flatten()
+            .collect::<Vec<_>>()
     }
     fn untokenize(&self, tokens: &[usize]) -> String {
         let mut out = String::new();

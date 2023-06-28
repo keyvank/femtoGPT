@@ -167,3 +167,21 @@ So sad that s the one too much time, but I m not sure if you re arg
 So sad that you are sadly supposed to be a big deal in the world
 So sad that I don t know about this, but I m not sure how you can do it, but
 ```
+
+**UPDATE 29th June 2023**
+
+After the implementation of the GPU trainer, we were able to train larger models. 
+Here are some samples from a 8-layer 8-head 128-embedding-degree model, trained on
+TinyStories dataset on a vocab-size of 1000:
+
+```
+Once upon a time, there was a little girl named Lily. She loved to play with her toys and she had a lot of fun. One day, Lily saw a big chicky playing with her toys. She asked her mom, "Can I play with her toys?" Her mom said, "Sure, Lily. But we have to clean the pales. Let's suet some candy, Lily." Lily nodded and went to her mom. They played with the mots and staugning her toys.  
+```
+
+```
+Once upon a time, there was a little girl named Lily. She loved to play outside and explore. One day, she found a jung on the ground. She picked it up and tecked it. She ran around and saw it. She was very sad. She asked her mom for her mom. Her mom said, "Lily, I'm going to find it!" Lily said. She ran to the slock and took her to the teplace. She went to the park and found a molla. She had a whip and
+```
+
+```
+There was a boy named Tim. Tim loved to play with his toys. One day, Tim's mom came to the park. Tim saw a big, red ball and wanted to play with it. Tim wanted to play with the ball. Tim was very excited. He wanted to play with the ball. But the ball was too fast. Tim wanted to play with the ball. But the ball was too fast. Tim tried to catch it, but it was too fast. Tim was sad. He tried to run away, but he did not want to play. Tim was sad. He did not want to play with the ball.
+```

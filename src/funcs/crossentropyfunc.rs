@@ -5,10 +5,14 @@ use crate::tensor::*;
 use super::{gpu, GpuFunction, TensorId};
 
 #[derive(Debug, Clone)]
-pub struct CrossEntropyFunc;
+pub struct CrossEntropyFunc {
+    exp_output: Tensor<f32>,
+}
 impl CrossEntropyFunc {
     pub fn new() -> Box<dyn Function> {
-        Box::new(Self {})
+        Box::new(Self {
+            exp_output: Tensor::scalar(0.),
+        })
     }
 }
 impl Function for CrossEntropyFunc {
@@ -20,15 +24,17 @@ impl Function for CrossEntropyFunc {
         let inp = inps[0].as_float()?;
         let target = inps[1].as_usize()?;
 
+        self.exp_output = inp.map(1, |o| Ok(o.map_values(|f| f.exp())))?;
+
         Tensor::raw(
             target.shape(),
             inp.keep_right(1)?
                 .inners()
                 .iter()
                 .zip(target.blob().iter())
-                .map(|(o, t)| {
-                    let o_exps = o.blob().iter().map(|f| f.exp()).collect::<Vec<_>>();
-                    let sum = o_exps.iter().sum::<f32>();
+                .zip(self.exp_output.keep_right(1)?.inners().iter())
+                .map(|((o, t), o_exps)| {
+                    let sum = o_exps.blob().iter().sum::<f32>();
                     let loss = sum.ln() - o.blob()[*t];
                     loss
                 })
@@ -47,13 +53,14 @@ impl Function for CrossEntropyFunc {
 
         Ok(vec![Tensor::raw(
             inp.shape(),
-            inp.keep_right(1)?
+            self.exp_output
+                .keep_right(1)?
                 .inners()
                 .iter()
                 .zip(target.blob().iter())
                 .zip(out_grad.blob().iter())
-                .map(|((o, t), g)| {
-                    let o_exps = o.blob().iter().map(|f| f.exp()).collect::<Vec<_>>();
+                .map(|((o_exps, t), g)| {
+                    let o_exps = o_exps.blob();
                     let sum = o_exps.iter().sum::<f32>();
                     let sum_inv = 1. / sum;
 

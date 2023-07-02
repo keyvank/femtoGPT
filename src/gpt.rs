@@ -309,7 +309,7 @@ impl<G: Graph> GPT<G> {
         let result_lin = g.call(MatMul::new(), &[norm_out, to_vocab])?;
         let output = g.call(Add::new(), &[result_lin, to_vocab_bias])?;
 
-        let loss = g.call(CrossEntropyFunc::new(), &[output, expected_output])?;
+        let loss = g.call(CrossEntropy::new(), &[output, expected_output])?;
 
         Ok(Self {
             graph: g,

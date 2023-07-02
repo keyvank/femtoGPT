@@ -5,17 +5,17 @@ use crate::tensor::*;
 use super::{gpu, GpuFunction, TensorId};
 
 #[derive(Debug, Clone)]
-pub struct CrossEntropyFunc {
+pub struct CrossEntropy {
     exp_output: Tensor<f32>,
 }
-impl CrossEntropyFunc {
+impl CrossEntropy {
     pub fn new() -> Box<dyn Function> {
         Box::new(Self {
             exp_output: Tensor::scalar(0.),
         })
     }
 }
-impl Function for CrossEntropyFunc {
+impl Function for CrossEntropy {
     fn run(
         &mut self,
         inps: &[&GeneralTensor],

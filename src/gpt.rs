@@ -18,11 +18,9 @@ pub struct GPT<G: Graph> {
     graph: G,
     num_tokens: usize,
     token_input: TensorId,
-    pos_input: TensorId,
     output: TensorId,
     expected_output: TensorId,
     loss: TensorId,
-    pos_input_fixed: Tensor<f32>,
     dataset_buffer: Option<(usize, TensorId, TensorId)>,
 }
 
@@ -330,15 +328,15 @@ impl<G: Graph> GPT<G> {
 
         let loss = g.call(CrossEntropy::new(), &[output, expected_output])?;
 
+        g.load(pos_input, &pos_encode_inter(num_tokens, embedding_degree))?;
+
         Ok(Self {
             graph: g,
             num_tokens,
             token_input,
-            pos_input,
             output,
             expected_output,
             loss,
-            pos_input_fixed: pos_encode_inter(num_tokens, embedding_degree),
             dataset_buffer,
         })
     }
@@ -409,8 +407,6 @@ impl<G: Graph> GPT<G> {
     where
         G: Clone + Send + Sync,
     {
-        self.graph.load(self.pos_input, &self.pos_input_fixed)?;
-
         for i in 0..num_batches {
             let timer = Instant::now();
             let (graphs, errs): (Vec<G>, Vec<f32>) = (0..batch_size)
@@ -474,8 +470,6 @@ impl<G: Graph> GPT<G> {
         learning_rate: F,
         callback: C,
     ) -> Result<(), GraphError> {
-        self.graph.load(self.pos_input, &self.pos_input_fixed)?;
-
         if let Some((buff_size, x_buffer, y_buffer)) = self.dataset_buffer.clone() {
             for b in 0..num_batches {
                 let timer = Instant::now();
@@ -555,8 +549,6 @@ impl<G: Graph> GPT<G> {
         let mut cnt = prompt.len();
         let mut context = vec![0; self.num_tokens];
         context[..prompt.len()].copy_from_slice(prompt);
-
-        self.graph.load(self.pos_input, &self.pos_input_fixed)?;
 
         for ch in prompt {
             callback(*ch);

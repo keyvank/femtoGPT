@@ -414,7 +414,7 @@ impl<G: Graph> GPT<G> {
                 .graph
                 .params()
                 .to_vec()
-                .into_iter()
+                .into_par_iter()
                 .map(|id| {
                     let mut avg = Tensor::<f32>::scalar(0.);
                     for g in graphs.iter() {

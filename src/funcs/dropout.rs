@@ -3,17 +3,18 @@ use crate::tensor::*;
 
 #[cfg(feature = "gpu")]
 use super::{gpu, GpuFunction, TensorId};
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct Dropout {
-    mask: Tensor<f32>,
+    mask: Arc<Tensor<f32>>,
     rate: f32,
 }
 impl Dropout {
     pub fn new(rate: f32) -> Box<dyn Function> {
         Box::new(Self {
             rate,
-            mask: Tensor::scalar(1.),
+            mask: Arc::new(Tensor::scalar(1.)),
         })
     }
 }
@@ -25,10 +26,10 @@ impl Function for Dropout {
             let mut rng = rand::thread_rng();
             let rnd = Tensor::<f32>::rand_range(&mut rng, 0., 1.0, inp.shape());
             let scale = 1. / (1. - self.rate);
-            self.mask = rnd.map_values(|v| if v > self.rate { scale } else { 0. });
-            (inp * &self.mask)?
+            self.mask = Arc::new(rnd.map_values(|v| if v > self.rate { scale } else { 0. }));
+            (inp * &self.mask.view())?
         } else {
-            self.mask = Tensor::scalar(1.);
+            self.mask = Arc::new(Tensor::scalar(1.));
             inp.clone()
         })
     }
@@ -37,7 +38,7 @@ impl Function for Dropout {
         _inps: &[&GeneralTensor],
         out_grad: &Tensor<f32>,
     ) -> Result<Vec<Tensor<f32>>, TensorError> {
-        Ok(vec![(out_grad * &self.mask)?])
+        Ok(vec![(out_grad * &self.mask.view())?])
     }
     fn clone_box(&self) -> Box<dyn Function> {
         Box::new(self.clone())

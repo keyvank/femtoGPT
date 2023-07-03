@@ -3,15 +3,15 @@ use crate::tensor::*;
 
 #[cfg(feature = "gpu")]
 use super::{gpu, GpuFunction, TensorId};
-
+use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub struct LayerNorm {
-    norm: Tensor<f32>,
+    norm: Arc<Tensor<f32>>,
 }
 impl LayerNorm {
     pub fn new() -> Box<dyn Function> {
         Box::new(Self {
-            norm: Tensor::scalar(0.),
+            norm: Arc::new(Tensor::scalar(0.)),
         })
     }
 }
@@ -28,7 +28,7 @@ impl Function for LayerNorm {
             .iter()
             .map(|t| t.as_float())
             .collect::<Result<Vec<_>, TensorError>>()?;
-        self.norm = inps[0].map(1, |l| {
+        self.norm = Arc::new(inps[0].map(1, |l| {
             let size_inv = 1. / l.size() as f32;
             let avg = l.blob().iter().sum::<f32>() * size_inv;
             let var = (l.blob().iter().map(|f| (f - avg).powi(2)).sum::<f32>() * size_inv
@@ -39,8 +39,8 @@ impl Function for LayerNorm {
                 l.shape(),
                 l.blob().iter().map(|v| (v - avg) * var_inv).collect(),
             )
-        })?;
-        &(&self.norm * inps[1])? + inps[2]
+        })?);
+        &(&self.norm.view() * inps[1])? + inps[2]
     }
     fn grad(
         &self,
@@ -91,7 +91,7 @@ impl Function for LayerNorm {
             .collect::<Vec<_>>();
         Ok(vec![
             Tensor::raw(out_grad.shape(), grad_inp0)?,
-            (out_grad * &self.norm)?,
+            (out_grad * &self.norm.view())?,
             out_grad.clone(),
         ])
     }

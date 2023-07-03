@@ -3,15 +3,15 @@ use crate::tensor::*;
 
 #[cfg(feature = "gpu")]
 use super::{gpu, GpuFunction, TensorId};
-
+use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub struct Softmax {
-    out: Tensor<f32>,
+    out: Arc<Tensor<f32>>,
 }
 impl Softmax {
     pub fn new() -> Box<dyn Function> {
         Box::new(Self {
-            out: Tensor::scalar(0.),
+            out: Arc::new(Tensor::scalar(0.)),
         })
     }
 }
@@ -25,16 +25,16 @@ impl Function for Softmax {
             .iter()
             .map(|t| t.as_float())
             .collect::<Result<Vec<_>, TensorError>>()?;
-        self.out = inps[0].map(1, |l| {
+        self.out = Arc::new(inps[0].map(1, |l| {
             let max = l
                 .blob()
                 .iter()
                 .fold(f32::NEG_INFINITY, |a, b| f32::max(a, *b));
             let sum = l.blob().iter().map(|f| (f - max).exp()).sum::<f32>();
             Ok(l.map_values(|f| (f - max).exp() / sum))
-        })?;
+        })?);
 
-        Ok(self.out.clone())
+        Ok(self.out.as_ref().clone())
     }
     fn grad(
         &self,

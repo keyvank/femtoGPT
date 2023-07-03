@@ -4,14 +4,16 @@ use crate::tensor::*;
 #[cfg(feature = "gpu")]
 use super::{gpu, GpuFunction, TensorId};
 
+use std::sync::Arc;
+
 #[derive(Debug, Clone)]
 pub struct CrossEntropy {
-    exp_output: Tensor<f32>,
+    exp_output: Arc<Tensor<f32>>,
 }
 impl CrossEntropy {
     pub fn new() -> Box<dyn Function> {
         Box::new(Self {
-            exp_output: Tensor::scalar(0.),
+            exp_output: Arc::new(Tensor::scalar(0.)),
         })
     }
 }
@@ -24,7 +26,7 @@ impl Function for CrossEntropy {
         let inp = inps[0].as_float()?;
         let target = inps[1].as_usize()?;
 
-        self.exp_output = inp.map(1, |o| Ok(o.map_values(|f| f.exp())))?;
+        self.exp_output = Arc::new(inp.map(1, |o| Ok(o.map_values(|f| f.exp())))?);
 
         Tensor::raw(
             target.shape(),

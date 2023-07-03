@@ -46,7 +46,7 @@ fn main() -> Result<(), GraphError> {
         &mut rng,
         graph,
         is_gpu.then(|| batch_size), // Pre-allocate batches only when using GPUs
-        is_gpu.then(|| dataset_buffer_size), // Allocate a dataset buffer on GPU to reduce data transfers
+        None,                       // Allocate a dataset buffer on GPU to reduce data transfers
         vocab_size,
         embedding_degree,
         num_tokens,

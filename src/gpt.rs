@@ -460,6 +460,20 @@ impl<G: Graph> GPT<G> {
         Ok(())
     }
 
+    pub fn optimizer_step<O: Optimizer, F: Fn(usize) -> f32>(
+        &mut self,
+        limit: Option<usize>,
+        optimizer: &O,
+        learning_rate: F,
+    ) -> Result<f32, GraphError> {
+        self.graph.forward(true)?;
+        self.graph.zero_grad()?;
+        let err = self.graph.backward_all(self.loss, limit)?;
+        let lr = learning_rate(self.graph.optimizer_step());
+        self.graph.optimize(optimizer, lr)?;
+        Ok(err)
+    }
+
     pub fn train<O: Optimizer, F: Fn(usize) -> f32, C: Fn(&mut Self) -> Result<(), GraphError>>(
         &mut self,
         dataset: &[usize],
@@ -471,13 +485,14 @@ impl<G: Graph> GPT<G> {
         callback: C,
     ) -> Result<(), GraphError> {
         if let Some((buff_size, x_buffer, y_buffer)) = self.dataset_buffer.clone() {
-            for b in 0..num_batches {
+            let batch_count = buff_size / batch_size;
+
+            for _ in 0..num_batches / batch_count {
                 let timer = Instant::now();
                 let mut rng = rand::thread_rng();
                 let (xs, ys) = sample_dataset(dataset, buff_size, self.num_tokens, &mut rng);
                 self.graph.load_usize(x_buffer, &xs)?;
                 self.graph.load_usize(y_buffer, &ys)?;
-                let batch_count = buff_size / batch_size;
                 assert_eq!(batch_count * batch_size, buff_size);
                 let mut err = 0.0;
                 for i in 0..batch_count {
@@ -495,11 +510,7 @@ impl<G: Graph> GPT<G> {
                         self.num_tokens * batch_size * i,
                         self.num_tokens * batch_size,
                     )?;
-                    self.graph.forward(true)?;
-                    self.graph.zero_grad()?;
-                    err = self.graph.backward_all(self.loss, limit)?;
-                    let lr = learning_rate(self.graph.optimizer_step());
-                    self.graph.optimize(optimizer, lr)?;
+                    err = self.optimizer_step(limit, optimizer, &learning_rate)?;
                 }
                 callback(self)?;
                 println!(
@@ -515,15 +526,9 @@ impl<G: Graph> GPT<G> {
                 let timer = Instant::now();
                 let mut rng = rand::thread_rng();
                 let (xs, ys) = sample_dataset(dataset, batch_size, self.num_tokens, &mut rng);
-
                 self.graph.load_usize(self.token_input, &xs)?;
                 self.graph.load_usize(self.expected_output, &ys)?;
-
-                self.graph.forward(true)?;
-                self.graph.zero_grad()?;
-                let err = self.graph.backward_all(self.loss, limit)?;
-                let lr = learning_rate(self.graph.optimizer_step());
-                self.graph.optimize(optimizer, lr)?;
+                let err = self.optimizer_step(limit, optimizer, &learning_rate)?;
                 if i % 50 == 0 {
                     callback(self)?;
                 }

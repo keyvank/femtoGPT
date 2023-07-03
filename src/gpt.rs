@@ -23,6 +23,7 @@ pub struct GPT<G: Graph> {
     expected_output: TensorId,
     loss: TensorId,
     pos_input_fixed: Tensor<f32>,
+    dataset_buffer: Option<(usize, TensorId, TensorId)>,
 }
 
 fn sample_dataset<R: Rng>(
@@ -105,6 +106,7 @@ impl<G: Graph> GPT<G> {
         rng: &mut R,
         mut g: G,
         batch_size: Option<usize>,
+        dataset_buffer_size: Option<usize>,
         vocab_size: usize,
         embedding_degree: usize,
         num_tokens: usize,
@@ -113,6 +115,23 @@ impl<G: Graph> GPT<G> {
         head_size: usize,
         dropout: f32,
     ) -> Result<Self, GraphError> {
+        // Mapping each token to a `embedding_degree` dimension space through a lookup table
+        let dataset_buffer = if let Some(dataset_buffer_size) = dataset_buffer_size {
+            Some((
+                dataset_buffer_size,
+                g.alloc_usize(
+                    Tensor::<usize>::zeros(&[dataset_buffer_size, num_tokens]),
+                    "dataset_x".into(),
+                )?,
+                g.alloc_usize(
+                    Tensor::<usize>::zeros(&[dataset_buffer_size, num_tokens]),
+                    "dataset_y".into(),
+                )?,
+            ))
+        } else {
+            None
+        };
+
         // Mapping each token to a `embedding_degree` dimension space through a lookup table
         let token_embedding = g.alloc(
             Tensor::<f32>::rand(rng, &[vocab_size, embedding_degree]),
@@ -320,6 +339,7 @@ impl<G: Graph> GPT<G> {
             expected_output,
             loss,
             pos_input_fixed: pos_encode_inter(num_tokens, embedding_degree),
+            dataset_buffer,
         })
     }
 
@@ -456,28 +476,70 @@ impl<G: Graph> GPT<G> {
     ) -> Result<(), GraphError> {
         self.graph.load(self.pos_input, &self.pos_input_fixed)?;
 
-        for i in 0..num_batches {
-            let timer = Instant::now();
-            let mut rng = rand::thread_rng();
-            let (xs, ys) = sample_dataset(dataset, batch_size, self.num_tokens, &mut rng);
-
-            self.graph.load_usize(self.token_input, &xs)?;
-            self.graph.load_usize(self.expected_output, &ys)?;
-
-            self.graph.forward(true)?;
-            self.graph.zero_grad()?;
-            let err = self.graph.backward_all(self.loss, limit)?;
-            let lr = learning_rate(self.graph.optimizer_step());
-            self.graph.optimize(optimizer, lr)?;
-            if i % 50 == 0 {
+        if let Some((buff_size, x_buffer, y_buffer)) = self.dataset_buffer.clone() {
+            for b in 0..num_batches {
+                let timer = Instant::now();
+                let mut rng = rand::thread_rng();
+                let (xs, ys) = sample_dataset(dataset, buff_size, self.num_tokens, &mut rng);
+                self.graph.load_usize(x_buffer, &xs)?;
+                self.graph.load_usize(y_buffer, &ys)?;
+                let batch_count = buff_size / batch_size;
+                assert_eq!(batch_count * batch_size, buff_size);
+                let mut err = 0.0;
+                for i in 0..batch_count {
+                    self.graph.copy(
+                        self.token_input,
+                        0,
+                        x_buffer,
+                        self.num_tokens * batch_size * i,
+                        self.num_tokens * batch_size,
+                    )?;
+                    self.graph.copy(
+                        self.expected_output,
+                        0,
+                        y_buffer,
+                        self.num_tokens * batch_size * i,
+                        self.num_tokens * batch_size,
+                    )?;
+                    self.graph.forward(true)?;
+                    self.graph.zero_grad()?;
+                    err = self.graph.backward_all(self.loss, limit)?;
+                    let lr = learning_rate(self.graph.optimizer_step());
+                    self.graph.optimize(optimizer, lr)?;
+                }
                 callback(self)?;
+                println!(
+                    "Step: {} Loss: {} (Elapsed: {}ms) ({}ms per batch)",
+                    self.graph.optimizer_step(),
+                    err,
+                    timer.elapsed().as_millis(),
+                    timer.elapsed().as_millis() as usize / batch_count
+                );
             }
-            println!(
-                "Step: {} Loss: {} (Elapsed: {}ms)",
-                self.graph.optimizer_step(),
-                err,
-                timer.elapsed().as_millis()
-            );
+        } else {
+            for i in 0..num_batches {
+                let timer = Instant::now();
+                let mut rng = rand::thread_rng();
+                let (xs, ys) = sample_dataset(dataset, batch_size, self.num_tokens, &mut rng);
+
+                self.graph.load_usize(self.token_input, &xs)?;
+                self.graph.load_usize(self.expected_output, &ys)?;
+
+                self.graph.forward(true)?;
+                self.graph.zero_grad()?;
+                let err = self.graph.backward_all(self.loss, limit)?;
+                let lr = learning_rate(self.graph.optimizer_step());
+                self.graph.optimize(optimizer, lr)?;
+                if i % 50 == 0 {
+                    callback(self)?;
+                }
+                println!(
+                    "Step: {} Loss: {} (Elapsed: {}ms)",
+                    self.graph.optimizer_step(),
+                    err,
+                    timer.elapsed().as_millis()
+                );
+            }
         }
         Ok(())
     }

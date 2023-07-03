@@ -33,6 +33,14 @@ pub trait Graph {
         tensor_id: TensorId,
         tensor: &T,
     ) -> Result<(), GraphError>;
+    fn copy(
+        &mut self,
+        dst: TensorId,
+        offset_dst: usize,
+        src: TensorId,
+        offset_src: usize,
+        count: usize,
+    ) -> Result<(), GraphError>;
     fn zero_grad(&mut self) -> Result<(), GraphError>;
     fn name_of(&self, id: TensorId) -> Result<&String, GraphError>;
     fn fetch(&mut self, id: TensorId, grad: bool) -> Result<(), GraphError>;
@@ -289,6 +297,16 @@ impl Graph for CpuGraph {
     fn set_optimizer_state(&mut self, state: &OptimizerState) -> Result<(), GraphError> {
         self.optimizer_state = state.clone();
         Ok(())
+    }
+    fn copy(
+        &mut self,
+        _dst: TensorId,
+        _offset_dst: usize,
+        _src: TensorId,
+        _offset_src: usize,
+        _count: usize,
+    ) -> Result<(), GraphError> {
+        unimplemented!();
     }
 }
 

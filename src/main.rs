@@ -29,6 +29,7 @@ fn main() -> Result<(), GraphError> {
     let dataset = tokenizer.tokenize(&dataset_char);
 
     let batch_size = 32;
+    let dataset_buffer_size = 8192;
     let num_tokens = 64;
     let vocab_size = tokenizer.vocab_size();
     let embedding_degree = 64;
@@ -45,6 +46,7 @@ fn main() -> Result<(), GraphError> {
         &mut rng,
         graph,
         is_gpu.then(|| batch_size), // Pre-allocate batches only when using GPUs
+        is_gpu.then(|| dataset_buffer_size), // Allocate a dataset buffer on GPU to reduce data transfers
         vocab_size,
         embedding_degree,
         num_tokens,

@@ -138,6 +138,14 @@ impl GpuGraph {
         }
         let mut src = String::new();
         src += "
+        __kernel void copy_ulong(__global ulong *dst, uint offset_dst, __global ulong *src, uint offset_src, uint count) {{
+            src += offset_src;
+            dst += offset_dst;
+            uint id = get_global_id(0);
+            if(id < count) {{
+                dst[id] = src[id];
+            }}
+        }}
         __kernel void zeroize(__global float *buff, uint n) {
             uint id = get_global_id(0);
             if(id < n) {{
@@ -663,6 +671,51 @@ impl Graph for GpuGraph {
                 v.write_from(&v_val)?;
             }
         }
+        Ok(())
+    }
+    fn copy(
+        &mut self,
+        dst: TensorId,
+        offset_dst: usize,
+        src: TensorId,
+        offset_src: usize,
+        count: usize,
+    ) -> Result<(), GraphError> {
+        self.compile()?;
+        let program = self.program.as_mut().ok_or(GraphError::NotReady)?;
+
+        self.tensors.get_mut(dst).unwrap().is_sync = false;
+
+        let dst_buff = self
+            .tensors
+            .get(dst)
+            .unwrap()
+            .buffer
+            .as_ref()
+            .ok_or(GraphError::NotReady)?;
+        let src_buff = self
+            .tensors
+            .get(src)
+            .unwrap()
+            .buffer
+            .as_ref()
+            .ok_or(GraphError::NotReady)?;
+
+        let local_work_size = 32;
+        let mut global_work_size = count;
+        global_work_size +=
+            (local_work_size - (global_work_size % local_work_size)) % local_work_size;
+        let mut kern =
+            program
+                .program
+                .create_kernel("copy_ulong", global_work_size, local_work_size);
+        kern = kern.arg(dst_buff);
+        kern = kern.arg(offset_dst as u32);
+        kern = kern.arg(src_buff);
+        kern = kern.arg(offset_src as u32);
+        kern = kern.arg(count as u32);
+        kern.run()?;
+
         Ok(())
     }
 }

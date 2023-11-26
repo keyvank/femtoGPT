@@ -9,8 +9,6 @@ femtoGPT is a pure Rust implementation of a minimal Generative Pretrained Transf
 It can be used for both *inference* and *training* of GPT-style language-models
 using **CPUs** and **GPUs**!
 
-🥳 ***We are happy to announce that [Paperspace](https://www.paperspace.com/) is sponsoring GPU resources to help the development of this project!*** 🤝
-
 ## Intro
 
 Everything is implemented from scratch, including the tensor processing logic

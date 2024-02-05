@@ -9,6 +9,8 @@ femtoGPT is a pure Rust implementation of a minimal Generative Pretrained Transf
 It can be used for both *inference* and *training* of GPT-style language-models
 using **CPUs** and **GPUs**!
 
+(***HEY!*** I'm also writing a book, which will soon discuss the implementation of a LLM in detail! Check it out here: [The Super Programmer](https://github.com/keyvank/tsp))
+
 ## Intro
 
 Everything is implemented from scratch, including the tensor processing logic
@@ -31,8 +33,6 @@ Correctness of gradients is checked using gradient-check method, though it still
 possible that some layers are implemented wrongly.
 
 ([Discord server](https://discord.gg/wTJFaDVn45) for discussions around the project!)
-
-(***HEY!*** I'm also writing a book, which will soon discuss the implementation of a LLM in detail! Check it out here: [The Super Programmer](https://github.com/keyvank/tsp))
 
 ## Usage
 

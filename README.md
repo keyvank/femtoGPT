@@ -32,6 +32,8 @@ possible that some layers are implemented wrongly.
 
 ([Discord server](https://discord.gg/wTJFaDVn45) for discussions around the project!)
 
+(***HEY!*** I'm also writing a book, which will soon discuss the implementation of a LLM in detail! Check it out here: [The Super Programmer](https://github.com/keyvank/tsp))
+
 ## Usage
 
 Make sure you have the Rust toolchain on your system, in order to compile and run

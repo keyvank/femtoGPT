@@ -101,6 +101,7 @@ fn pos_encode_inter(num_tokens: usize, embedding_size: usize) -> Tensor<f32> {
 }
 
 impl<G: Graph> GPT<G> {
+    // Create a new GPT model
     pub fn new<R: Rng>(
         rng: &mut R,
         mut g: G,
@@ -342,6 +343,7 @@ impl<G: Graph> GPT<G> {
             .sum::<usize>()
     }
 
+    // Save the model to a file
     pub fn set_training_state(
         &mut self,
         training_state: TrainingState,

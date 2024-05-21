@@ -23,7 +23,7 @@ fn main() -> Result<(), GraphError> {
 
     // Create a unique char-to-int mapping for all unique characters inside our dataset
     let dataset_char =
-        fs::read_to_string("dataset.txt").expect("Should have been able to read the file");
+        fs::read_to_string("./data/dataset.txt").expect("Should have been able to read the file");
     let tokenizer = SimpleTokenizer::new(&dataset_char);
 
     let dataset = tokenizer.tokenize(&dataset_char);
@@ -54,6 +54,7 @@ fn main() -> Result<(), GraphError> {
         dropout,
     )?;
 
+    // Sync the model to the device
     gpt.sync()?;
 
     println!("Number of parameters: {}", gpt.num_params());
@@ -70,7 +71,7 @@ fn main() -> Result<(), GraphError> {
         let ts: TrainingState = bincode::deserialize(&bytes).unwrap();
         gpt.set_training_state(ts, true)?;
     }
-
+    // Print the model summary
     println!();
     println!("Starting the training loop... (This make take hours to converge! be patient!)");
     println!();

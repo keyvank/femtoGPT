@@ -32,6 +32,7 @@ pub trait Optimizer: Clone + Serialize + serde::de::DeserializeOwned {
 
 const EPSILON: f32 = 1e-8;
 
+// Adam optimizer!
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AdamW {
     beta1: f32,

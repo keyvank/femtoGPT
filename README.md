@@ -11,6 +11,18 @@ using **CPUs** and **GPUs**!
 
 (***HEY!*** I'm also writing a book, which will soon discuss the implementation of a LLM in detail! Check it out here: [The Super Programmer](https://github.com/keyvank/tsp))
 
+## Usage
+
+Training:
+
+`cargo run --release -- train`
+
+Inference:
+
+`cargo run --release -- infer`
+
+(Note: Add `--features gpu` in order to leverage GPU speedups!)
+
 ## Intro
 
 Everything is implemented from scratch, including the tensor processing logic

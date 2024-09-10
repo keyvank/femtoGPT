@@ -86,6 +86,12 @@ fn main() -> Result<(), GraphError> {
 
             gpt.sync()?;
 
+            let mut ts_file = fs::File::open(&training_state_path).unwrap();
+            let mut bytes = Vec::new();
+            ts_file.read_to_end(&mut bytes).unwrap();
+            let ts: TrainingState = bincode::deserialize(&bytes).unwrap();
+            gpt.set_training_state(ts, true)?;
+
             println!("Generating text:");
 
             let inference = gpt.infer(
@@ -96,15 +102,9 @@ fn main() -> Result<(), GraphError> {
                 |_ch| {},
             )?;
 
-            // Generate 100 character with the currently trained model before
-            // starting the training loop.
+            // Generate 100 character with the currently trained model
             println!("{}", tokenizer.untokenize(&inference));
 
-            println!("Saving the model...");
-            gpt.sync().unwrap();
-            let ts = gpt.get_training_state().unwrap();
-            let bytes = bincode::serialize(&ts).unwrap();
-            fs::write(training_state_path, &bytes).expect("Unable to write file");
             Ok(())
         }
         Cli::Train { dataset, model } => {

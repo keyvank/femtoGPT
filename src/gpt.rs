@@ -42,6 +42,9 @@ fn sample_dataset<R: Rng>(
             .take(context_size + 1)
             .cloned()
             .collect::<Vec<_>>();
+        let vec: __m128i = _mm_load_si128(&mut all);
+        let vec2: __m128i = _mm_xor_si128(vec, _mm_load_si128(&mut xs));
+        _mm_store_si128(vec2, &mut ys);
         xs.extend(&all[0..context_size]);
         ys.extend(&all[1..context_size + 1]);
     }

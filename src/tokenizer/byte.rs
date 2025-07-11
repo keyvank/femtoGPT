@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 pub struct ByteTokenizer;
 
 impl ByteTokenizer {
-    pub fn new(_: &str) -> Self {
+    pub fn new() -> Self {
         ByteTokenizer
     }
 }

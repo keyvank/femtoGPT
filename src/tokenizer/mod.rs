@@ -1,3 +1,6 @@
+mod byte;
+pub use byte::*;
+
 mod simple;
 pub use simple::*;
 

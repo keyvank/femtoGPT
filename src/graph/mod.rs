@@ -7,51 +7,128 @@ use crate::tensor::*;
 use std::collections::{BTreeMap, HashMap};
 use thiserror::Error;
 
+/// A unique identifier for a tensor within a computation graph.
 pub type TensorId = usize;
 
+/// Trait representing a computation graph (CPU or GPU) that manages tensor allocations,
+/// operations, gradients, and optimization.
 pub trait Graph {
+    /// Allocate a new tensor of `f32` values in the graph.
+    ///
+    /// # Arguments
+    /// * `t` - The tensor to allocate.
+    /// * `is_param` - If `true`, this tensor will be treated as a trainable parameter.
+    /// * `name` - A human-readable name for the tensor (used for debugging or graph inspection).
+    ///
+    /// # Returns
+    /// A unique `TensorId` that can be used to reference the tensor in future operations.
     fn alloc(
         &mut self,
         t: Tensor<f32>,
         is_param: bool,
         name: String,
     ) -> Result<TensorId, GraphError>;
+
+    // TODO: doc
     fn alloc_usize(&mut self, t: Tensor<usize>, name: String) -> Result<TensorId, GraphError>;
+
+    /// Returns a slice of `TensorId`s representing all trainable parameters in the graph.
     fn params(&self) -> &[TensorId];
+
+    /// Load data into an existing tensor in the graph.
+    ///
+    /// # Arguments
+    /// * `tensor_id` - The tensor to update.
+    /// * `tensor` - The tensor containing the new values.
     fn load<T: TensorOps<f32>>(
         &mut self,
         tensor_id: TensorId,
         tensor: &T,
     ) -> Result<(), GraphError>;
+
+    /// Load `usize` data into an existing tensor in the graph.
     fn load_usize<T: TensorOps<usize>>(
         &mut self,
         tensor_id: TensorId,
         tensor: &T,
     ) -> Result<(), GraphError>;
+
+    /// Load gradient values into an existing tensor in the graph.
     fn load_grad<T: TensorOps<f32>>(
         &mut self,
         tensor_id: TensorId,
         tensor: &T,
     ) -> Result<(), GraphError>;
+
+    /// Reset all gradients in the graph to zero.
+    ///
+    /// Typically called at the start of each training iteration.
     fn zero_grad(&mut self) -> Result<(), GraphError>;
+
+    /// Get the name of a tensor given its `TensorId`.
     fn name_of(&self, id: TensorId) -> Result<&String, GraphError>;
+
+    /// Fetch the value (or gradient) of a tensor from the graph to host memory.
+    ///
+    /// # Arguments
+    /// * `id` - The tensor to fetch.
+    /// * `grad` - If `true`, fetch the gradient instead of the value.
     fn fetch(&mut self, id: TensorId, grad: bool) -> Result<(), GraphError>;
+
+    /// Get a reference to a tensor stored in the graph.
     fn get(&self, id: TensorId) -> Result<&GeneralTensor, GraphError>;
+
+    /// Get a reference to the gradient tensor associated with a given tensor.
     fn get_grad(&self, id: TensorId) -> Result<&Tensor<f32>, GraphError>;
+
+    /// Perform backpropagation starting from the given tensor.
+    ///
+    /// # Arguments
+    /// * `id` - Tensor from which to start backpropagation.
+    /// * `limit` - Optional limit to restrict the number of operations or layers considered.
+    ///
+    /// # Returns
+    /// The computed loss value as `f32`.
     fn backward_all(&mut self, id: TensorId, limit: Option<usize>) -> Result<f32, GraphError>;
+
+    /// Execute a forward pass on the computation graph.
+    ///
+    /// # Arguments
+    /// * `training` - Set to `true` if the forward pass is part of training (enables dropout, etc.).
     fn forward(&mut self, training: bool) -> Result<(), GraphError>;
+
+    /// Call a function (operation) on tensors in the graph.
+    ///
+    /// # Arguments
+    /// * `f` - The function or operation to execute.
+    /// * `tensor_ids` - List of input tensor IDs.
+    ///
+    /// # Returns
+    /// `TensorId` of the output tensor.
     fn call(
         &mut self,
         f: Box<dyn Function>,
         tensor_ids: &[TensorId],
     ) -> Result<TensorId, GraphError>;
+
+    /// Apply an optimizer to update trainable parameters.
+    ///
+    /// # Arguments
+    /// * `optimizer` - Optimizer instance (e.g., AdamW).
+    /// * `learning_rate` - Current learning rate.
     fn optimize<O: Optimizer>(
         &mut self,
         optimizer: &O,
         learning_rate: f32,
     ) -> Result<(), GraphError>;
+
+    /// Return the number of optimizer steps that have been applied.
     fn optimizer_step(&self) -> usize;
+
+    /// Retrieve the current state of the optimizer.
     fn get_optimizer_state(&self) -> Result<OptimizerState, GraphError>;
+
+    /// Set the optimizer state (useful for resuming training from a checkpoint).
     fn set_optimizer_state(&mut self, state: &OptimizerState) -> Result<(), GraphError>;
 }
 

@@ -4,12 +4,20 @@ use crate::tensor::{Tensor, TensorError, TensorOps};
 use rayon::prelude::*;
 use std::collections::HashMap;
 
+/// Tracks the state of an optimizer across training steps.
+///
+/// This struct maintains the current step count and stores optimizer-specific
+/// state tensors (such as momentum and velocity for Adam-based optimizers).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OptimizerState {
     pub step: usize,
     pub state: HashMap<String, Tensor<f32>>,
 }
 
+/// GPU-specific optimizer implementation details.
+///
+/// Contains the OpenCL kernel code and metadata needed to execute
+/// optimizer steps on GPU hardware.
 #[cfg(feature = "gpu")]
 #[derive(Clone, Debug)]
 pub struct GpuOptimizer {
@@ -18,7 +26,22 @@ pub struct GpuOptimizer {
     pub kernel_name: String,
 }
 
+/// Trait for implementing optimization algorithms.
+///
+/// This trait defines the interface for different optimizer implementations,
+/// such as Adam, SGD, or other gradient-based optimization methods.
 pub trait Optimizer: Clone + Serialize + serde::de::DeserializeOwned {
+    /// Performs a single optimization step to update model parameters.
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - A map of parameter names to tuples of (mutable parameter tensor, gradient tensor)
+    /// * `optimizer_state` - Mutable reference to the optimizer state, tracking steps and internal buffers
+    /// * `learning_rate` - The learning rate controlling the magnitude of parameter updates
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` on success, or a `TensorError` if computation fails.
     fn step(
         &self,
         params: HashMap<String, (&mut Tensor<f32>, &Tensor<f32>)>,
@@ -30,8 +53,16 @@ pub trait Optimizer: Clone + Serialize + serde::de::DeserializeOwned {
     fn gpu_impl(&self, params: &HashMap<String, Vec<usize>>) -> GpuOptimizer;
 }
 
+/// Small constant used for numerical stability to prevent division by zero.
 const EPSILON: f32 = 1e-8;
 
+/// AdamW optimizer with weight decay regularization.
+///
+/// Implements the AdamW (Adam with decoupled Weight decay regularization) algorithm.
+/// See: https://pytorch.org/docs/stable/generated/torch.optim.AdamW.html
+///
+/// This optimizer combines adaptive learning rates (like Adam) with explicit
+/// L2 weight decay, which improves generalization compared to L2 regularization.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AdamW {
     beta1: f32,
@@ -39,6 +70,12 @@ pub struct AdamW {
     weight_decay: f32,
 }
 
+/// Creates a new AdamW optimizer with default hyperparameters.
+///
+/// Default values:
+/// - beta1: 0.9
+/// - beta2: 0.999
+/// - weight_decay: 0.01
 impl AdamW {
     pub fn new() -> Self {
         Self {

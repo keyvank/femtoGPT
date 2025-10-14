@@ -15,6 +15,7 @@ pub struct TrainingState {
 }
 
 pub struct GPT<G: Graph> {
+    /// Computation graph backend
     graph: G,
     num_tokens: usize,
     token_input: TensorId,
@@ -25,6 +26,22 @@ pub struct GPT<G: Graph> {
     pos_input_fixed: Tensor<f32>,
 }
 
+/// Samples a batch of sequences from the dataset for training.
+///
+/// This function randomly selects starting positions in the dataset and extracts
+/// sequences of length `context_size + 1`. The first `context_size` elements form
+/// the input (xs), and the last `context_size` elements form the expected output (ys).
+///
+/// # Arguments
+///
+/// * `dataset` - The complete dataset as a slice of token indices
+/// * `batch_size` - The number of sequences to sample
+/// * `context_size` - The length of each sequence
+/// * `rng` - A random number generator for reproducible sampling
+///
+/// # Returns
+///
+/// A tuple of (input_tensor, output_tensor) with shapes [batch_size, context_size]
 fn sample_dataset<R: Rng>(
     dataset: &[usize],
     batch_size: usize,
@@ -77,6 +94,7 @@ fn select<R: Rng, T: TensorOps<f32>>(
     panic!();
 }
 
+/// Generates sinusoidal positional encodings
 fn pos_encode_inter(num_tokens: usize, embedding_size: usize) -> Tensor<f32> {
     let mut raw_new = Vec::new();
     let cols = embedding_size;
@@ -101,6 +119,49 @@ fn pos_encode_inter(num_tokens: usize, embedding_size: usize) -> Tensor<f32> {
 }
 
 impl<G: Graph> GPT<G> {
+    /// Constructs a new GPT model instance.
+    ///
+    /// This method initializes all components of the transformer architecture, including:
+    /// 1. Token embeddings
+    /// 2. Positional embeddings
+    /// 3. Multi-head attention layers
+    /// 4. Layer normalization
+    /// 5. Feed-forward sublayers
+    /// 6. Output projection to vocabulary
+    ///
+    /// # Arguments
+    /// * `rng` - Random number generator for parameter initialization
+    /// * `g` - Graph instance (CPU or GPU) for tensor allocations and operations
+    /// * `batch_size` - Optional batch size; `None` for CPU training (parallelization over instances)
+    /// * `vocab_size` - Number of unique tokens in the vocabulary
+    /// * `embedding_degree` - Dimensionality of token embeddings
+    /// * `num_tokens` - Maximum sequence length (number of tokens)
+    /// * `num_layers` - Number of transformer layers
+    /// * `num_heads` - Number of attention heads
+    /// * `head_size` - Dimension of each attention head
+    /// * `dropout` - Dropout probability for attention and feed-forward layers (default: 0.0)
+    ///
+    /// # Returns
+    /// A fully initialized `GPT` instance ready for training or inference.
+    ///
+    /// # Panics
+    /// Panics if the graph operations fail (`GraphError`) or if tensor allocations fail.
+    ///
+    /// # Architecture Overview
+    ///
+    /// The model follows this pipeline:
+    /// 1. **Token Embedding**: Maps token indices to `embedding_degree`-dimensional vectors
+    /// 2. **Positional Encoding**: Adds position-aware information to embeddings
+    /// 3. **Transformer Blocks** (repeated `num_layers` times):
+    ///    - Layer normalization
+    ///    - Multi-head self-attention with causal masking
+    ///    - Residual connection and dropout
+    ///    - Layer normalization
+    ///    - Feed-forward network (2 linear layers with GELU activation)
+    ///    - Residual connection
+    /// 4. **Output Projection**: Maps from `embedding_degree` to `vocab_size` logits
+    /// 5. **Loss Computation**: Calculates cross-entropy loss against expected outputs
+    ///
     pub fn new<R: Rng>(
         rng: &mut R,
         mut g: G,
@@ -168,6 +229,7 @@ impl<G: Graph> GPT<G> {
                 true,
                 format!("norm_{}_coeff", l),
             )?;
+            // Learnable bias terms for layer normalization before attention.
             let norm_bias = g.alloc(
                 Tensor::<f32>::zeros(&[embedding_degree]),
                 true,
@@ -177,7 +239,8 @@ impl<G: Graph> GPT<G> {
 
             let mut heads = Vec::new();
 
-            // Multi-head Attention
+            // MULTI-HEAD SELF-ATTENTION
+
             for h in 0..num_heads {
                 // Key
                 let k_params = g.alloc(
@@ -203,18 +266,32 @@ impl<G: Graph> GPT<G> {
                 )?;
                 let v = g.call(MatMul::new(), &[norm_inp, v_params])?;
 
+                // Transpose query for matrix multiplication with keys.
                 let q_t = g.call(Transpose::new(), &[q])?;
+
+                // Compute attention scores: keys @ queries_transposed
                 let kq = g.call(MatMul::new(), &[k, q_t])?;
 
+                // Scale factor to stabilize attention scores. (Typically 1/sqrt(head_size).)
                 let head_size_sqrt_inv = (head_size as f32).powf(-0.5);
+                // Scaled attention scores to prevent gradient explosion.
                 let kq_coeff = g.call(Coeff::new(head_size_sqrt_inv), &[kq])?;
 
+                // Apply causal mask to prevent attending to future tokens.
+                // Sets upper triangle of attention matrix to -∞ (causing softmax to produce ~0).
                 let masked_kq = g.call(TrilMask::new(num_tokens), &[kq_coeff])?;
+                // Compute attention weights via softmax.
                 let soft_masked_kq = g.call(Softmax::new(), &[masked_kq])?;
+
+                // Apply dropout to attention weights for regularization.
                 let dropped_soft_masked_kq = g.call(Dropout::new(dropout), &[soft_masked_kq])?;
+
+                // Compute weighted sum of values: attention_weights @ values
                 let atten = g.call(MatMul::new(), &[dropped_soft_masked_kq, v])?;
                 heads.push(atten);
             }
+
+            // MULTI-HEAD ATTENTION OUTPUT PROJECTION
 
             // Concat head results and project into embedding_degree
             let cat = g.call(Cat::new(), &heads)?;
@@ -223,6 +300,7 @@ impl<G: Graph> GPT<G> {
                 true,
                 format!("proj_{}_weights", l),
             )?;
+            // Bias for projection layer.
             let proj_bias_params = g.alloc(
                 Tensor::<f32>::zeros(&[embedding_degree]),
                 true,
@@ -230,15 +308,20 @@ impl<G: Graph> GPT<G> {
             )?;
             let proj_cat = g.call(MatMul::new(), &[cat, proj_params])?;
             let proj_cat_bias = g.call(Add::new(), &[proj_cat, proj_bias_params])?;
+            // Apply dropout to projected attention output.
             let dropped_proj_cat_bias = g.call(Dropout::new(dropout), &[proj_cat_bias])?;
+
+            // RESIDUAL CONNECTION AND POST-ATTENTION NORMALIZATION
 
             // Add attention results to input and then normalize
             let add_atten = g.call(Add::new(), &[norm_inp, dropped_proj_cat_bias])?;
+            // Scale coefficients for layer normalization after attention.
             let add_atten_norm_coeff = g.alloc(
                 Tensor::<f32>::rand(rng, &[embedding_degree]),
                 true,
                 format!("atten_norm_{}_coeff", l),
             )?;
+            // Bias for layer normalization after attention.
             let add_atten_norm_bias = g.alloc(
                 Tensor::<f32>::zeros(&[embedding_degree]),
                 true,
@@ -249,10 +332,13 @@ impl<G: Graph> GPT<G> {
                 &[add_atten, add_atten_norm_coeff, add_atten_norm_bias],
             )?;
 
-            // A feed-forward layer:
-            // Linear embedding_degree -> 4*embedding_degree
-            // Relu
-            // Linear 4*embedding_degree -> embedding_degree
+            // FEED-FORWARD NETWORK (Position-wise Feed-Forward):
+
+            // Architecture: Linear(embedding_degree -> 4*embedding_degree)
+            //              -> GELU activation
+            //              -> Linear(4*embedding_degree -> embedding_degree)
+
+            // First linear layer weights: expands from embedding_degree to 4*embedding_degree.
             let lin1_params = g.alloc(
                 Tensor::<f32>::rand(rng, &[embedding_degree, 4 * embedding_degree]),
                 true,
@@ -263,9 +349,14 @@ impl<G: Graph> GPT<G> {
                 true,
                 format!("feedforward1_{}_bias", l),
             )?;
+            // Apply first linear transformation.
             let lin1_result = g.call(MatMul::new(), &[add_atten_norm, lin1_params])?;
             let lin1_bias_result = g.call(Add::new(), &[lin1_result, bias1_params])?;
+
+            // Apply GELU activation function (smooth ReLU variant).
             let lin1_act = g.call(Gelu::new(), &[lin1_bias_result])?;
+
+            // Second linear layer weights: contracts from 4*embedding_degree back to embedding_degree.
             let lin2_params = g.alloc(
                 Tensor::<f32>::rand(rng, &[4 * embedding_degree, embedding_degree]),
                 true,
@@ -276,9 +367,11 @@ impl<G: Graph> GPT<G> {
                 true,
                 format!("feedforward2_{}_bias", l),
             )?;
+            // Apply second linear transformation.
             let lin2_result = g.call(MatMul::new(), &[lin1_act, lin2_params])?;
             let lin2_bias_result = g.call(Add::new(), &[lin2_result, bias2_params])?;
 
+            // Final residual connection: add FFN output back to post-attention normalized input.
             curr_inp = g.call(Add::new(), &[add_atten_norm, lin2_bias_result])?;
         }
 
@@ -309,6 +402,8 @@ impl<G: Graph> GPT<G> {
         let result_lin = g.call(MatMul::new(), &[norm_out, to_vocab])?;
         let output = g.call(Add::new(), &[result_lin, to_vocab_bias])?;
 
+        // Cross-entropy loss comparing predicted logits against expected outputs.
+        // Used for backpropagation during training.
         let loss = g.call(CrossEntropy::new(), &[output, expected_output])?;
 
         Ok(Self {
@@ -323,6 +418,7 @@ impl<G: Graph> GPT<G> {
         })
     }
 
+    /// Synchronizes the latest parameter values
     pub fn sync(&mut self) -> Result<(), GraphError> {
         self.graph
             .params()
@@ -333,6 +429,7 @@ impl<G: Graph> GPT<G> {
         Ok(())
     }
 
+    /// Returns the total number of trainable parameters in the model.
     pub fn num_params(&self) -> usize {
         self.graph
             .params()
@@ -342,6 +439,11 @@ impl<G: Graph> GPT<G> {
             .sum::<usize>()
     }
 
+    /// Loads a saved `TrainingState` (weights and optionally optimizer state) into the model.
+    ///
+    /// # Arguments
+    /// * `training_state` - Previously saved `TrainingState`.
+    /// * `load_optimizer` - Whether to restore optimizer state.
     pub fn set_training_state(
         &mut self,
         training_state: TrainingState,

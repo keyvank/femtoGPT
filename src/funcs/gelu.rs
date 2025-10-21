@@ -7,6 +7,17 @@ use super::{gpu, GpuFunction, TensorId};
 const SQRT_2_OVER_PI: f32 = 0.7978845608;
 const GELU_CONST: f32 = 0.044715;
 
+/// Computes the Gaussian Error Linear Unit (GELU) activation function.
+///
+/// GELU is a smooth, non-linear activation function that has been shown to work
+/// well in modern deep learning models, particularly in transformer architectures.
+/// It approximates the input multiplied by the cumulative distribution function
+/// of a Gaussian distribution.
+///
+/// The function uses the tanh-based approximation for computational efficiency:
+/// ```text
+/// GELU(x) = 0.5 * x * (tanh(sqrt(2/π) * (x + 0.044715 * x³)) + 1)
+/// ```
 fn gelu(x: f32) -> f32 {
     0.5 * x * ((SQRT_2_OVER_PI * (x + GELU_CONST * x.powi(3))).tanh() + 1.)
 }
